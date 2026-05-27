@@ -5,6 +5,6 @@ export declare class JwtAuthGuard extends JwtAuthGuard_base implements CanActiva
     private readonly reflector;
     constructor(reflector: Reflector);
     canActivate(context: ExecutionContext): true | Promise<boolean>;
-    handleRequest(err: any, user: any): any;
+    handleRequest<T>(err: any, user: T): T;
 }
 export {};

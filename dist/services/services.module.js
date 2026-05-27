@@ -15,7 +15,7 @@ let ServicesModule = class ServicesModule {
 exports.ServicesModule = ServicesModule;
 exports.ServicesModule = ServicesModule = __decorate([
     (0, common_1.Module)({
-        controllers: [services_controller_1.ServicesController],
+        controllers: [services_controller_1.ServicesController, services_controller_1.AdminServicesController],
         providers: [services_service_1.ServicesService],
         exports: [services_service_1.ServicesService],
     })

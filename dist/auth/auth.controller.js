@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
 const auth_service_1 = require("./auth.service");
+const register_dto_1 = require("./dto/register.dto");
 const public_decorator_1 = require("./decorators/public.decorator");
 const current_user_decorator_1 = require("./decorators/current-user.decorator");
 let AuthController = class AuthController {
@@ -22,11 +23,8 @@ let AuthController = class AuthController {
     constructor(authService) {
         this.authService = authService;
     }
-    adminLogin(body) {
-        return this.authService.loginAdmin(body.username, body.password);
-    }
-    studentLogin(body) {
-        return this.authService.loginStudent(body.admissionNo);
+    register(dto) {
+        return this.authService.register(dto);
     }
     me(user) {
         return this.authService.getMe(user);
@@ -35,20 +33,12 @@ let AuthController = class AuthController {
 exports.AuthController = AuthController;
 __decorate([
     (0, public_decorator_1.Public)(),
-    (0, common_1.Post)('admin/login'),
+    (0, common_1.Post)('register'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [register_dto_1.RegisterDto]),
     __metadata("design:returntype", void 0)
-], AuthController.prototype, "adminLogin", null);
-__decorate([
-    (0, public_decorator_1.Public)(),
-    (0, common_1.Post)('student/login'),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", void 0)
-], AuthController.prototype, "studentLogin", null);
+], AuthController.prototype, "register", null);
 __decorate([
     (0, common_1.Get)('me'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),

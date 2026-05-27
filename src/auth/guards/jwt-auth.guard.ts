@@ -18,9 +18,9 @@ export class JwtAuthGuard extends AuthGuard('supabase-jwt') implements CanActiva
     return super.canActivate(context) as Promise<boolean>;
   }
 
-  handleRequest(err: any, user: any) {
+  handleRequest<T>(err: any, user: T): T {
     if (err || !user) {
-      throw new UnauthorizedException({ code: 'SESSION_EXPIRED', message: 'Login required' });
+      throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Login required' });
     }
     return user;
   }

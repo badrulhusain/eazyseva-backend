@@ -12,26 +12,26 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ServicesController = void 0;
+exports.AdminServicesController = exports.ServicesController = void 0;
 const common_1 = require("@nestjs/common");
 const public_decorator_1 = require("../auth/decorators/public.decorator");
+const roles_decorator_1 = require("../auth/decorators/roles.decorator");
+const roles_guard_1 = require("../auth/guards/roles.guard");
 const services_service_1 = require("./services.service");
+const create_service_dto_1 = require("./dto/create-service.dto");
+const update_service_dto_1 = require("./dto/update-service.dto");
 let ServicesController = class ServicesController {
     servicesService;
     constructor(servicesService) {
         this.servicesService = servicesService;
     }
-    findAll(category) {
-        return {
-            success: true,
-            data: this.servicesService.findAll(category),
-        };
+    async findAll(category) {
+        const data = await this.servicesService.findAll(category);
+        return { success: true, data };
     }
-    findBySlug(slug) {
-        return {
-            success: true,
-            data: this.servicesService.findBySlug(slug),
-        };
+    async findBySlug(slug) {
+        const data = await this.servicesService.findBySlug(slug);
+        return { success: true, data };
     }
 };
 exports.ServicesController = ServicesController;
@@ -40,18 +40,65 @@ __decorate([
     __param(0, (0, common_1.Query)('category')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], ServicesController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)(':slug'),
     __param(0, (0, common_1.Param)('slug')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], ServicesController.prototype, "findBySlug", null);
 exports.ServicesController = ServicesController = __decorate([
     (0, public_decorator_1.Public)(),
     (0, common_1.Controller)('services'),
     __metadata("design:paramtypes", [services_service_1.ServicesService])
 ], ServicesController);
+let AdminServicesController = class AdminServicesController {
+    servicesService;
+    constructor(servicesService) {
+        this.servicesService = servicesService;
+    }
+    async create(dto) {
+        const data = await this.servicesService.create(dto);
+        return { success: true, data };
+    }
+    async update(id, dto) {
+        const data = await this.servicesService.update(id, dto);
+        return { success: true, data };
+    }
+    async remove(id) {
+        const data = await this.servicesService.softDelete(id);
+        return { success: true, data };
+    }
+};
+exports.AdminServicesController = AdminServicesController;
+__decorate([
+    (0, common_1.Post)(),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_service_dto_1.CreateServiceDto]),
+    __metadata("design:returntype", Promise)
+], AdminServicesController.prototype, "create", null);
+__decorate([
+    (0, common_1.Patch)(':id'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_service_dto_1.UpdateServiceDto]),
+    __metadata("design:returntype", Promise)
+], AdminServicesController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AdminServicesController.prototype, "remove", null);
+exports.AdminServicesController = AdminServicesController = __decorate([
+    (0, roles_decorator_1.Roles)('ADMIN'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, common_1.Controller)('admin/services'),
+    __metadata("design:paramtypes", [services_service_1.ServicesService])
+], AdminServicesController);
 //# sourceMappingURL=services.controller.js.map

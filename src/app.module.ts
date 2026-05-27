@@ -4,11 +4,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { SupabaseModule } from './supabase/supabase.module';
 import { AuthModule } from './auth/auth.module';
-import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { UsersModule } from './users/users.module';
 import { ServicesModule } from './services/services.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
-  imports: [SupabaseModule, AuthModule, ServicesModule],
+  imports: [SupabaseModule, AuthModule, UsersModule, ServicesModule],
   controllers: [AppController],
   providers: [
     AppService,

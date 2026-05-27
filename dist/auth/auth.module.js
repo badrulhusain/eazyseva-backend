@@ -11,15 +11,13 @@ const common_1 = require("@nestjs/common");
 const passport_1 = require("@nestjs/passport");
 const auth_service_1 = require("./auth.service");
 const auth_controller_1 = require("./auth.controller");
-const supabase_jwt_strategy_1 = require("./supabase-jwt.strategy");
+const supabase_jwt_strategy_1 = require("./strategies/supabase-jwt.strategy");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
 exports.AuthModule = AuthModule = __decorate([
     (0, common_1.Module)({
-        imports: [
-            passport_1.PassportModule.register({ defaultStrategy: 'supabase-jwt' }),
-        ],
+        imports: [passport_1.PassportModule.register({ defaultStrategy: 'supabase-jwt' })],
         controllers: [auth_controller_1.AuthController],
         providers: [auth_service_1.AuthService, supabase_jwt_strategy_1.SupabaseJwtStrategy],
         exports: [passport_1.PassportModule, supabase_jwt_strategy_1.SupabaseJwtStrategy],

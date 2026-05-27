@@ -31,7 +31,7 @@ let JwtAuthGuard = class JwtAuthGuard extends (0, passport_1.AuthGuard)('supabas
     }
     handleRequest(err, user) {
         if (err || !user) {
-            throw new common_1.UnauthorizedException({ code: 'SESSION_EXPIRED', message: 'Login required' });
+            throw new common_1.UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Login required' });
         }
         return user;
     }

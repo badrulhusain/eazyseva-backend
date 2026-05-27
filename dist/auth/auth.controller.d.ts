@@ -1,42 +1,20 @@
-import type { User } from '@supabase/supabase-js';
 import { AuthService } from './auth.service';
+import { RegisterDto } from './dto/register.dto';
+import type { CurrentUser as CurrentUserType } from '../common/types/current-user.type';
 export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
-    adminLogin(body: {
-        username: string;
-        password: string;
-    }): Promise<{
-        token_hash: string;
-        type: "magiclink";
-        role: "admin";
+    register(dto: RegisterDto): Promise<{
+        success: boolean;
+        data: {
+            id: string;
+            email: string | undefined;
+            full_name: string;
+            phone: string;
+        };
     }>;
-    studentLogin(body: {
-        admissionNo: string;
-    }): Promise<{
-        token_hash: string;
-        type: "magiclink";
-        role: "student";
-    }>;
-    me(user: User): Promise<{
-        id: string;
-        role: "admin";
-        profile: {
-            id: any;
-            username: any;
-            createdAt: any;
-        } | null;
-    } | {
-        id: string;
-        role: "student";
-        profile: {
-            id: any;
-            name: any;
-            admissionNo: any;
-            department: any;
-            batch: any;
-            active: any;
-            createdAt: any;
-        } | null;
-    }>;
+    me(user: CurrentUserType): {
+        success: boolean;
+        data: CurrentUserType;
+    };
 }
