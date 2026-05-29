@@ -12,6 +12,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ServicesService = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../supabase/supabase.service");
+const LIST_COLUMNS = 'id, title, slug, category, price, govt_fee, processing_fee, delivery_days_min, delivery_days_max, icon, is_popular';
+const DETAIL_COLUMNS = 'id, title, slug, description, category, price, govt_fee, processing_fee, delivery_days_min, delivery_days_max, required_documents, icon, is_popular, is_active, created_at, updated_at';
 let ServicesService = class ServicesService {
     supabaseService;
     constructor(supabaseService) {
@@ -20,7 +22,7 @@ let ServicesService = class ServicesService {
     async findAll(category) {
         let query = this.supabaseService.admin
             .from('services')
-            .select('*')
+            .select(LIST_COLUMNS)
             .eq('is_active', true)
             .order('is_popular', { ascending: false })
             .order('title', { ascending: true });
@@ -35,7 +37,7 @@ let ServicesService = class ServicesService {
     async findBySlug(slug) {
         const { data, error } = await this.supabaseService.admin
             .from('services')
-            .select('*')
+            .select(DETAIL_COLUMNS)
             .eq('slug', slug)
             .eq('is_active', true)
             .single();

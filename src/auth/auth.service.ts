@@ -26,6 +26,26 @@ export class AuthService {
       throw new InternalServerErrorException({ code: 'REGISTER_FAILED', message: error.message });
     }
 
+    const { error: profileError } = await this.supabaseService.admin
+      .from('profiles')
+      .upsert(
+        {
+          id: data.user.id,
+          email: data.user.email,
+          full_name: dto.full_name,
+          phone: dto.phone,
+          role: 'USER',
+        },
+        { onConflict: 'id' },
+      );
+
+    if (profileError) {
+      throw new InternalServerErrorException({
+        code: 'PROFILE_CREATE_FAILED',
+        message: profileError.message,
+      });
+    }
+
     return {
       success: true,
       data: {

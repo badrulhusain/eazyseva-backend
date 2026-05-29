@@ -7,8 +7,8 @@ export declare class AuthController {
     register(dto: RegisterDto): Promise<{
         success: boolean;
         data: {
-            id: string;
-            email: string | undefined;
+            id: any;
+            email: any;
             full_name: string;
             phone: string;
         };

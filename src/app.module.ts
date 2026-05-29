@@ -6,10 +6,11 @@ import { SupabaseModule } from './supabase/supabase.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ServicesModule } from './services/services.module';
+import { OrdersModule } from './orders/orders.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
-  imports: [SupabaseModule, AuthModule, UsersModule, ServicesModule],
+  imports: [SupabaseModule, AuthModule, UsersModule, ServicesModule, OrdersModule],
   controllers: [AppController],
   providers: [
     AppService,

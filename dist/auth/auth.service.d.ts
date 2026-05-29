@@ -7,8 +7,8 @@ export declare class AuthService {
     register(dto: RegisterDto): Promise<{
         success: boolean;
         data: {
-            id: string;
-            email: string | undefined;
+            id: any;
+            email: any;
             full_name: string;
             phone: string;
         };

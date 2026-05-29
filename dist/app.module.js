@@ -15,13 +15,14 @@ const supabase_module_1 = require("./supabase/supabase.module");
 const auth_module_1 = require("./auth/auth.module");
 const users_module_1 = require("./users/users.module");
 const services_module_1 = require("./services/services.module");
+const orders_module_1 = require("./orders/orders.module");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
-        imports: [supabase_module_1.SupabaseModule, auth_module_1.AuthModule, users_module_1.UsersModule, services_module_1.ServicesModule],
+        imports: [supabase_module_1.SupabaseModule, auth_module_1.AuthModule, users_module_1.UsersModule, services_module_1.ServicesModule, orders_module_1.OrdersModule],
         controllers: [app_controller_1.AppController],
         providers: [
             app_service_1.AppService,

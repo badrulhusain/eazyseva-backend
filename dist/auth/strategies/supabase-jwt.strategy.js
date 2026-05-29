@@ -33,19 +33,36 @@ let SupabaseJwtStrategy = class SupabaseJwtStrategy extends (0, passport_1.Passp
             .select('id, email, role, full_name, phone')
             .eq('id', payload.sub)
             .single();
-        if (error || !profile) {
+        if (profile) {
+            return {
+                id: profile.id,
+                email: profile.email,
+                role: profile.role,
+                full_name: profile.full_name ?? null,
+                phone: profile.phone ?? null,
+            };
+        }
+        if (error?.code !== 'PGRST116') {
             throw new common_1.UnauthorizedException({
-                code: 'PROFILE_NOT_FOUND',
-                message: 'User profile not found',
+                code: 'PROFILE_LOOKUP_FAILED',
+                message: error?.message ?? 'Unable to load user profile',
             });
         }
-        return {
-            id: profile.id,
-            email: profile.email,
-            role: profile.role,
-            full_name: profile.full_name ?? null,
-            phone: profile.phone ?? null,
+        const fallbackUser = {
+            id: payload.sub,
+            email: payload.email,
+            role: 'USER',
+            full_name: payload.user_metadata?.full_name ?? null,
+            phone: payload.user_metadata?.phone ?? null,
         };
+        await this.supabaseService.admin.from('profiles').upsert({
+            id: fallbackUser.id,
+            email: fallbackUser.email,
+            role: fallbackUser.role,
+            full_name: fallbackUser.full_name,
+            phone: fallbackUser.phone,
+        }, { onConflict: 'id' });
+        return fallbackUser;
     }
 };
 exports.SupabaseJwtStrategy = SupabaseJwtStrategy;

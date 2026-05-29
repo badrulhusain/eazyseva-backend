@@ -5,18 +5,24 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
-import type { ServiceCategory } from './services.types';
+import type { ServiceCategory, ServiceListItem, ServiceItem } from './services.types';
 import type { CreateServiceDto } from './dto/create-service.dto';
 import type { UpdateServiceDto } from './dto/update-service.dto';
+
+const LIST_COLUMNS =
+  'id, title, slug, category, price, govt_fee, processing_fee, delivery_days_min, delivery_days_max, icon, is_popular' as const;
+
+const DETAIL_COLUMNS =
+  'id, title, slug, description, category, price, govt_fee, processing_fee, delivery_days_min, delivery_days_max, required_documents, icon, is_popular, is_active, created_at, updated_at' as const;
 
 @Injectable()
 export class ServicesService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
-  async findAll(category?: ServiceCategory) {
+  async findAll(category?: ServiceCategory): Promise<ServiceListItem[]> {
     let query = this.supabaseService.admin
       .from('services')
-      .select('*')
+      .select(LIST_COLUMNS)
       .eq('is_active', true)
       .order('is_popular', { ascending: false })
       .order('title', { ascending: true });
@@ -30,10 +36,10 @@ export class ServicesService {
     return data ?? [];
   }
 
-  async findBySlug(slug: string) {
+  async findBySlug(slug: string): Promise<ServiceItem> {
     const { data, error } = await this.supabaseService.admin
       .from('services')
-      .select('*')
+      .select(DETAIL_COLUMNS)
       .eq('slug', slug)
       .eq('is_active', true)
       .single();

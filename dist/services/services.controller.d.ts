@@ -7,11 +7,11 @@ export declare class ServicesController {
     constructor(servicesService: ServicesService);
     findAll(category?: ServiceCategory): Promise<{
         success: boolean;
-        data: any[];
+        data: import("./services.types").ServiceListItem[];
     }>;
     findBySlug(slug: string): Promise<{
         success: boolean;
-        data: any;
+        data: import("./services.types").ServiceItem;
     }>;
 }
 export declare class AdminServicesController {

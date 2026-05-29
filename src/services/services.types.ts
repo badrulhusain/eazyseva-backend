@@ -9,20 +9,23 @@ export type ServiceCategory =
   | 'FORM_FILLING'
   | 'GOVERNMENT_SCHEME';
 
-export interface ServiceItem {
+export interface ServiceListItem {
   id: string;
   title: string;
   slug: string;
-  description: string | null;
   category: ServiceCategory;
   price: number;
   govt_fee: number;
   processing_fee: number;
   delivery_days_min: number;
   delivery_days_max: number;
-  required_documents: string[];
   icon: string | null;
   is_popular: boolean;
+}
+
+export interface ServiceItem extends ServiceListItem {
+  description: string | null;
+  required_documents: string[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
