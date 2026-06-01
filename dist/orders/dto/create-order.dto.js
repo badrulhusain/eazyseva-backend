@@ -32,7 +32,7 @@ __decorate([
     __metadata("design:type", String)
 ], CustomerDto.prototype, "phone", void 0);
 __decorate([
-    (0, class_validator_1.IsDateString)(),
+    (0, class_validator_1.IsDateString)({}, { message: 'dateOfBirth must be a valid ISO 8601 date (e.g. 1990-05-15)' }),
     __metadata("design:type", String)
 ], CustomerDto.prototype, "dateOfBirth", void 0);
 __decorate([
@@ -44,6 +44,11 @@ class DocumentDto {
     name;
     url;
     publicId;
+    label;
+    originalName;
+    resourceType;
+    format;
+    bytes;
 }
 exports.DocumentDto = DocumentDto;
 __decorate([
@@ -52,8 +57,9 @@ __decorate([
     __metadata("design:type", String)
 ], DocumentDto.prototype, "name", void 0);
 __decorate([
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsUrl)({ protocols: ['https'], require_protocol: true }, {
+        message: 'url must be a valid HTTPS URL',
+    }),
     __metadata("design:type", String)
 ], DocumentDto.prototype, "url", void 0);
 __decorate([
@@ -61,6 +67,31 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], DocumentDto.prototype, "publicId", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], DocumentDto.prototype, "label", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], DocumentDto.prototype, "originalName", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], DocumentDto.prototype, "resourceType", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], DocumentDto.prototype, "format", void 0);
+__decorate([
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], DocumentDto.prototype, "bytes", void 0);
 class PriceDto {
     governmentFee;
     serviceCharge;
@@ -85,7 +116,7 @@ __decorate([
 ], PriceDto.prototype, "documentHandling", void 0);
 __decorate([
     (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.IsPositive)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], PriceDto.prototype, "total", void 0);
 class CreateOrderDto {
@@ -115,6 +146,7 @@ __decorate([
 __decorate([
     (0, class_validator_1.ValidateNested)(),
     (0, class_transformer_1.Type)(() => PriceDto),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", PriceDto)
 ], CreateOrderDto.prototype, "price", void 0);
 //# sourceMappingURL=create-order.dto.js.map

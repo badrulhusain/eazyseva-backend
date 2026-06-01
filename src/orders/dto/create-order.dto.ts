@@ -5,8 +5,8 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
-  IsPositive,
   IsString,
+  IsUrl,
   Matches,
   MinLength,
   ValidateNested,
@@ -23,7 +23,7 @@ export class CustomerDto {
   })
   phone: string;
 
-  @IsDateString()
+  @IsDateString({}, { message: 'dateOfBirth must be a valid ISO 8601 date (e.g. 1990-05-15)' })
   dateOfBirth: string;
 
   @IsString()
@@ -36,15 +36,40 @@ export class DocumentDto {
   @IsNotEmpty()
   name: string;
 
-  @IsString()
-  @IsNotEmpty()
+  // Must be a valid HTTPS URL — prevents raw strings from being stored as document references
+  @IsUrl({ protocols: ['https'], require_protocol: true }, {
+    message: 'url must be a valid HTTPS URL',
+  })
   url: string;
 
   @IsString()
   @IsOptional()
   publicId?: string;
+
+  @IsString()
+  @IsOptional()
+  label?: string;
+
+  @IsString()
+  @IsOptional()
+  originalName?: string;
+
+  @IsString()
+  @IsOptional()
+  resourceType?: string;
+
+  @IsString()
+  @IsOptional()
+  format?: string;
+
+  @IsNumber()
+  @IsOptional()
+  bytes?: number;
 }
 
+// Price fields are accepted for backwards-compat with the current frontend,
+// but are IGNORED — the backend calculates all prices from the services table.
+// Phase 4: remove this class entirely once the frontend no longer sends price.
 export class PriceDto {
   @IsNumber()
   @IsOptional()
@@ -59,11 +84,13 @@ export class PriceDto {
   documentHandling?: number;
 
   @IsNumber()
-  @IsPositive()
-  total: number;
+  @IsOptional()
+  total?: number;
 }
 
 export class CreateOrderDto {
+  // Must match an active service slug in the services table.
+  // Backend validates existence and fetches prices server-side.
   @IsString()
   @IsNotEmpty()
   serviceType: string;
@@ -78,7 +105,9 @@ export class CreateOrderDto {
   @IsOptional()
   documents?: DocumentDto[];
 
+  // Optional: backend ignores these values and recalculates from service catalog.
   @ValidateNested()
   @Type(() => PriceDto)
-  price: PriceDto;
+  @IsOptional()
+  price?: PriceDto;
 }

@@ -1,5 +1,6 @@
 export type OrderStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
-export type PaymentStatus = 'NOT_PAID' | 'PAID' | 'FAILED';
+export type PaymentStatus = 'NOT_PAID' | 'PAYMENT_PENDING' | 'PAID' | 'FAILED';
+export type DemoPaymentMethod = 'DEMO_UPI' | 'DEMO_CARD' | 'DEMO_CASH' | 'PAY_LATER';
 export interface OrderDocument {
     name: string;
     url: string;
@@ -17,6 +18,18 @@ export interface OrderPrice {
     documentHandling: number;
     total: number;
 }
+export interface OrderPayment {
+    method: DemoPaymentMethod | null;
+    demoTransactionId: string | null;
+    amount: number;
+    currency: string;
+    paidAt: string | null;
+    failureReason: string | null;
+}
+export interface TimelineEntry {
+    event: string;
+    timestamp: string;
+}
 export interface Order {
     id: string;
     orderNumber: string;
@@ -27,6 +40,8 @@ export interface Order {
     price: OrderPrice;
     status: OrderStatus;
     paymentStatus: PaymentStatus;
+    payment: OrderPayment;
+    timeline: TimelineEntry[];
     createdAt: string;
     updatedAt: string;
 }
@@ -46,6 +61,12 @@ export interface OrderRow {
     price_total: number | string;
     status: OrderStatus;
     payment_status: PaymentStatus;
+    payment_method: DemoPaymentMethod | null;
+    demo_transaction_id: string | null;
+    payment_currency: string;
+    paid_at: string | null;
+    payment_failure_reason: string | null;
+    timeline: TimelineEntry[];
     created_at: string;
     updated_at: string;
 }

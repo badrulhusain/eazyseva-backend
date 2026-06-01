@@ -8,6 +8,6 @@ import { SupabaseJwtStrategy } from './strategies/supabase-jwt.strategy';
   imports: [PassportModule.register({ defaultStrategy: 'supabase-jwt' })],
   controllers: [AuthController],
   providers: [AuthService, SupabaseJwtStrategy],
-  exports: [PassportModule, SupabaseJwtStrategy],
+  exports: [AuthService, PassportModule, SupabaseJwtStrategy],
 })
 export class AuthModule {}

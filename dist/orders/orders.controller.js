@@ -20,6 +20,7 @@ const update_order_status_dto_1 = require("./dto/update-order-status.dto");
 const current_user_decorator_1 = require("../auth/decorators/current-user.decorator");
 const roles_decorator_1 = require("../auth/decorators/roles.decorator");
 const roles_guard_1 = require("../auth/guards/roles.guard");
+const pagination_dto_1 = require("../common/dto/pagination.dto");
 let OrdersController = class OrdersController {
     ordersService;
     constructor(ordersService) {
@@ -57,7 +58,7 @@ __decorate([
 ], OrdersController.prototype, "getMyOrders", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -72,8 +73,12 @@ let AdminOrdersController = class AdminOrdersController {
     constructor(ordersService) {
         this.ordersService = ordersService;
     }
-    async findAll() {
-        const data = await this.ordersService.findAll();
+    async findAll(query) {
+        const result = await this.ordersService.findAll(query);
+        return { success: true, ...result };
+    }
+    async findOne(id) {
+        const data = await this.ordersService.findOneAdmin(id);
         return { success: true, data };
     }
     async updateStatus(id, dto) {
@@ -84,13 +89,21 @@ let AdminOrdersController = class AdminOrdersController {
 exports.AdminOrdersController = AdminOrdersController;
 __decorate([
     (0, common_1.Get)(),
+    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [pagination_dto_1.PaginationDto]),
     __metadata("design:returntype", Promise)
 ], AdminOrdersController.prototype, "findAll", null);
 __decorate([
+    (0, common_1.Get)(':id'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AdminOrdersController.prototype, "findOne", null);
+__decorate([
     (0, common_1.Patch)(':id/status'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, update_order_status_dto_1.UpdateOrderStatusDto]),

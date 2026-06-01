@@ -5,8 +5,10 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
@@ -15,7 +17,10 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import type { CurrentUser as CurrentUserType } from '../common/types/current-user.type';
+
+// ── User-facing routes (JWT only) ─────────────────────────────────────────────
 
 @Controller('orders')
 export class OrdersController {
@@ -39,7 +44,7 @@ export class OrdersController {
 
   @Get(':id')
   async findOne(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: CurrentUserType,
   ) {
     const data = await this.ordersService.findOne(id, user.id);
@@ -47,21 +52,34 @@ export class OrdersController {
   }
 }
 
+// ── Admin routes (JWT + ADMIN role) ──────────────────────────────────────────
+
 @Roles('ADMIN')
 @UseGuards(RolesGuard)
 @Controller('admin/orders')
 export class AdminOrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
+  /**
+   * GET /api/v1/admin/orders?page=1&limit=20&status=PENDING
+   *
+   * Paginated list. Max 100 rows per page to prevent huge payloads.
+   */
   @Get()
-  async findAll() {
-    const data = await this.ordersService.findAll();
+  async findAll(@Query() query: PaginationDto) {
+    const result = await this.ordersService.findAll(query);
+    return { success: true, ...result };
+  }
+
+  @Get(':id')
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+    const data = await this.ordersService.findOneAdmin(id);
     return { success: true, data };
   }
 
   @Patch(':id/status')
   async updateStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateOrderStatusDto,
   ) {
     const data = await this.ordersService.updateStatus(id, dto);

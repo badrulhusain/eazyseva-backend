@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -7,12 +8,42 @@ import { SupabaseService } from '../supabase/supabase.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import type { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import type { Order, OrderRow } from './orders.types';
+import type { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class OrdersService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
+  // ── User: create order ────────────────────────────────────────────
+
   async create(dto: CreateOrderDto, userId: string): Promise<Order> {
+    // ── Server-side price lookup from service catalog ──────────────
+    // Never trust price values from the frontend. Prices come from the
+    // services table only. serviceType must match an active service slug.
+    const { data: service, error: svcError } = await this.supabaseService.admin
+      .from('services')
+      .select('id, price, govt_fee, processing_fee')
+      .eq('slug', dto.serviceType)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (svcError) {
+      throw new InternalServerErrorException({ code: 'DB_ERROR', message: svcError.message });
+    }
+
+    if (!service) {
+      throw new BadRequestException({
+        code: 'INVALID_SERVICE',
+        message: `Service "${dto.serviceType}" not found or is not currently available.`,
+      });
+    }
+
+    const governmentFee = Number(service.govt_fee ?? 0);
+    const serviceCharge = Number(service.processing_fee ?? 0);
+    const documentHandling = 0; // Extend in Phase 4 if needed
+    const total = Number(service.price ?? governmentFee + serviceCharge);
+
+    // ── Generate unique order number (atomic, race-condition safe) ──
     const { data: orderNumber, error: seqError } =
       await this.supabaseService.admin.rpc('next_order_number');
 
@@ -23,7 +54,7 @@ export class OrdersService {
       });
     }
 
-    // TODO(Phase 3): Replace with server-calculated price from service catalog.
+    // ── Insert order row ────────────────────────────────────────────
     const { data, error } = await this.supabaseService.admin
       .from('orders')
       .insert({
@@ -35,10 +66,10 @@ export class OrdersService {
         customer_dob: dto.customer.dateOfBirth,
         customer_address: dto.customer.address,
         documents: dto.documents ?? [],
-        price_government_fee: dto.price.governmentFee ?? 0,
-        price_service_charge: dto.price.serviceCharge ?? 0,
-        price_document_handling: dto.price.documentHandling ?? 0,
-        price_total: dto.price.total,
+        price_government_fee: governmentFee,
+        price_service_charge: serviceCharge,
+        price_document_handling: documentHandling,
+        price_total: total,
         status: 'PENDING',
         payment_status: 'NOT_PAID',
       })
@@ -55,6 +86,8 @@ export class OrdersService {
     return OrdersService.formatRow(data as OrderRow);
   }
 
+  // ── User: list own orders ─────────────────────────────────────────
+
   async findMyOrders(userId: string): Promise<Order[]> {
     const { data, error } = await this.supabaseService.admin
       .from('orders')
@@ -68,6 +101,8 @@ export class OrdersService {
 
     return ((data ?? []) as OrderRow[]).map(OrdersService.formatRow);
   }
+
+  // ── User: get single order ────────────────────────────────────────
 
   async findOne(id: string, userId: string): Promise<Order> {
     const { data, error } = await this.supabaseService.admin
@@ -90,20 +125,56 @@ export class OrdersService {
     return OrdersService.formatRow(row);
   }
 
-  // ── Admin ─────────────────────────────────────────────────────────
+  // ── Admin: paginated list ─────────────────────────────────────────
 
-  async findAll(): Promise<Order[]> {
-    const { data, error } = await this.supabaseService.admin
+  async findAll(
+    pagination: PaginationDto,
+  ): Promise<{ data: Order[]; total: number; page: number; limit: number }> {
+    const { page, limit, status } = pagination;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = this.supabaseService.admin
       .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
     }
 
-    return ((data ?? []) as OrderRow[]).map(OrdersService.formatRow);
+    return {
+      data: ((data ?? []) as OrderRow[]).map(OrdersService.formatRow),
+      total: count ?? 0,
+      page,
+      limit,
+    };
   }
+
+  // ── Admin: single order ───────────────────────────────────────────
+
+  async findOneAdmin(id: string): Promise<Order> {
+    const { data, error } = await this.supabaseService.admin
+      .from('orders')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+    }
+
+    return OrdersService.formatRow(data as OrderRow);
+  }
+
+  // ── Admin: update status ──────────────────────────────────────────
 
   async updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<Order> {
     const { data, error } = await this.supabaseService.admin
@@ -143,6 +214,15 @@ export class OrdersService {
       },
       status: row.status,
       paymentStatus: row.payment_status,
+      payment: {
+        method: row.payment_method ?? null,
+        demoTransactionId: row.demo_transaction_id ?? null,
+        amount: Number(row.price_total),
+        currency: row.payment_currency ?? 'INR',
+        paidAt: row.paid_at ?? null,
+        failureReason: row.payment_failure_reason ?? null,
+      },
+      timeline: row.timeline ?? [],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

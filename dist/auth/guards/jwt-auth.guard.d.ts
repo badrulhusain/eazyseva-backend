@@ -1,10 +1,10 @@
 import { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-declare const JwtAuthGuard_base: any;
-export declare class JwtAuthGuard extends JwtAuthGuard_base implements CanActivate {
+import { AuthService } from '../auth.service';
+export declare class JwtAuthGuard implements CanActivate {
     private readonly reflector;
-    constructor(reflector: Reflector);
-    canActivate(context: ExecutionContext): true | Promise<boolean>;
-    handleRequest<T>(err: any, user: T): T;
+    private readonly authService;
+    constructor(reflector: Reflector, authService: AuthService);
+    canActivate(context: ExecutionContext): Promise<boolean>;
+    private extractBearerToken;
 }
-export {};

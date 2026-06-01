@@ -33,10 +33,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code = this.statusToCode(status);
         message = exception.message;
       }
+
+      // Log all 5xx HttpExceptions — these are server bugs, not client errors
+      if (status >= 500) {
+        this.logger.error(
+          `[${status}] ${code}: ${message} — ${request.method} ${request.url}`,
+          exception.stack,
+        );
+      }
     } else if (exception instanceof Error) {
-      this.logger.error(exception.message, exception.stack);
+      this.logger.error(
+        `Unhandled error: ${exception.message} — ${request.method} ${request.url}`,
+        exception.stack,
+      );
     } else {
-      this.logger.error('Unknown exception', String(exception));
+      this.logger.error(
+        `Unknown exception — ${request.method} ${request.url}`,
+        String(exception),
+      );
     }
 
     response.status(status).json({
@@ -56,6 +70,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       404: 'NOT_FOUND',
       409: 'CONFLICT',
       422: 'UNPROCESSABLE_ENTITY',
+      429: 'TOO_MANY_REQUESTS',
       500: 'INTERNAL_ERROR',
     };
     return map[status] ?? 'ERROR';

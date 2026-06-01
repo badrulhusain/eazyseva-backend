@@ -59,8 +59,77 @@ let AuthService = class AuthService {
             },
         };
     }
+    async login(dto) {
+        const { data, error } = await this.supabaseService.supabase.auth.signInWithPassword({
+            email: dto.email,
+            password: dto.password,
+        });
+        if (error || !data.session || !data.user) {
+            throw new common_1.UnauthorizedException({
+                code: 'INVALID_CREDENTIALS',
+                message: 'Invalid email or password',
+            });
+        }
+        const user = await this.resolveCurrentUser(data.user);
+        return {
+            success: true,
+            data: {
+                user,
+                accessToken: data.session.access_token,
+                refreshToken: data.session.refresh_token,
+                expiresAt: data.session.expires_at ?? null,
+            },
+        };
+    }
     getMe(user) {
         return { success: true, data: user };
+    }
+    async getUserFromAccessToken(token) {
+        const { data, error } = await this.supabaseService.supabase.auth.getUser(token);
+        if (error || !data.user) {
+            throw new common_1.UnauthorizedException({
+                code: 'UNAUTHORIZED',
+                message: 'Login required',
+            });
+        }
+        return this.resolveCurrentUser(data.user);
+    }
+    async resolveCurrentUser(user) {
+        const { data: profile, error } = await this.supabaseService.admin
+            .from('profiles')
+            .select('id, email, role, full_name, phone')
+            .eq('id', user.id)
+            .single();
+        if (profile) {
+            return {
+                id: profile.id,
+                email: profile.email,
+                role: profile.role,
+                full_name: profile.full_name ?? null,
+                phone: profile.phone ?? null,
+            };
+        }
+        if (error?.code !== 'PGRST116') {
+            throw new common_1.UnauthorizedException({
+                code: 'PROFILE_LOOKUP_FAILED',
+                message: error?.message ?? 'Unable to load user profile',
+            });
+        }
+        const fallbackUser = {
+            id: user.id,
+            email: user.email ?? '',
+            role: 'USER',
+            full_name: user.user_metadata?.full_name ?? null,
+            phone: user.user_metadata?.phone ?? null,
+        };
+        await this.supabaseService.admin.from('profiles').upsert({
+            id: fallbackUser.id,
+            email: fallbackUser.email,
+            role: fallbackUser.role,
+            full_name: fallbackUser.full_name,
+            phone: fallbackUser.phone,
+        }, { onConflict: 'id' });
+        return fallbackUser;
     }
 };
 exports.AuthService = AuthService;

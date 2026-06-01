@@ -8,16 +8,21 @@ export declare class DocumentDto {
     name: string;
     url: string;
     publicId?: string;
+    label?: string;
+    originalName?: string;
+    resourceType?: string;
+    format?: string;
+    bytes?: number;
 }
 export declare class PriceDto {
     governmentFee?: number;
     serviceCharge?: number;
     documentHandling?: number;
-    total: number;
+    total?: number;
 }
 export declare class CreateOrderDto {
     serviceType: string;
     customer: CustomerDto;
     documents?: DocumentDto[];
-    price: PriceDto;
+    price?: PriceDto;
 }

@@ -9,6 +9,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
+const config_1 = require("@nestjs/config");
+const throttler_1 = require("@nestjs/throttler");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
 const supabase_module_1 = require("./supabase/supabase.module");
@@ -16,17 +18,55 @@ const auth_module_1 = require("./auth/auth.module");
 const users_module_1 = require("./users/users.module");
 const services_module_1 = require("./services/services.module");
 const orders_module_1 = require("./orders/orders.module");
+const uploads_module_1 = require("./uploads/uploads.module");
+const payments_module_1 = require("./payments/payments.module");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
+const request_logger_middleware_1 = require("./common/middleware/request-logger.middleware");
+function validateEnv(config) {
+    const required = [
+        'SUPABASE_URL',
+        'SUPABASE_ANON_KEY',
+        'SUPABASE_JWT_SECRET',
+        'SUPABASE_SERVICE_ROLE_KEY',
+        'CLOUDINARY_CLOUD_NAME',
+        'CLOUDINARY_API_KEY',
+        'CLOUDINARY_API_SECRET',
+    ];
+    const missing = required.filter((key) => !config[key]);
+    if (missing.length > 0) {
+        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+    return config;
+}
 let AppModule = class AppModule {
+    configure(consumer) {
+        consumer.apply(request_logger_middleware_1.RequestLoggerMiddleware).forRoutes('*');
+    }
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
-        imports: [supabase_module_1.SupabaseModule, auth_module_1.AuthModule, users_module_1.UsersModule, services_module_1.ServicesModule, orders_module_1.OrdersModule],
+        imports: [
+            config_1.ConfigModule.forRoot({
+                isGlobal: true,
+                validate: validateEnv,
+            }),
+            throttler_1.ThrottlerModule.forRoot([
+                { name: 'default', ttl: 60_000, limit: 100 },
+            ]),
+            supabase_module_1.SupabaseModule,
+            auth_module_1.AuthModule,
+            users_module_1.UsersModule,
+            services_module_1.ServicesModule,
+            orders_module_1.OrdersModule,
+            uploads_module_1.UploadsModule,
+            payments_module_1.PaymentsModule,
+        ],
         controllers: [app_controller_1.AppController],
         providers: [
             app_service_1.AppService,
             { provide: core_1.APP_GUARD, useClass: jwt_auth_guard_1.JwtAuthGuard },
+            { provide: core_1.APP_GUARD, useClass: throttler_1.ThrottlerGuard },
         ],
     })
 ], AppModule);

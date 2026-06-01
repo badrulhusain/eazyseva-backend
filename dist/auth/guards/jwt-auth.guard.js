@@ -8,38 +8,48 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.JwtAuthGuard = void 0;
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
-const passport_1 = require("@nestjs/passport");
 const public_decorator_1 = require("../decorators/public.decorator");
-let JwtAuthGuard = class JwtAuthGuard extends (0, passport_1.AuthGuard)('supabase-jwt') {
+const auth_service_1 = require("../auth.service");
+let JwtAuthGuard = class JwtAuthGuard {
     reflector;
-    constructor(reflector) {
-        super();
+    authService;
+    constructor(reflector, authService) {
         this.reflector = reflector;
+        this.authService = authService;
     }
-    canActivate(context) {
+    async canActivate(context) {
         const isPublic = this.reflector.getAllAndOverride(public_decorator_1.IS_PUBLIC_KEY, [
             context.getHandler(),
             context.getClass(),
         ]);
         if (isPublic)
             return true;
-        return super.canActivate(context);
-    }
-    handleRequest(err, user) {
-        if (err || !user) {
+        const request = context.switchToHttp().getRequest();
+        const token = this.extractBearerToken(request);
+        if (!token) {
             throw new common_1.UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Login required' });
         }
-        return user;
+        request.user = await this.authService.getUserFromAccessToken(token);
+        return true;
+    }
+    extractBearerToken(request) {
+        const authorization = request.headers.authorization;
+        if (!authorization)
+            return null;
+        const [scheme, token] = authorization.split(' ');
+        if (scheme?.toLowerCase() !== 'bearer' || !token)
+            return null;
+        return token;
     }
 };
 exports.JwtAuthGuard = JwtAuthGuard;
 exports.JwtAuthGuard = JwtAuthGuard = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [typeof (_a = typeof core_1.Reflector !== "undefined" && core_1.Reflector) === "function" ? _a : Object])
+    __metadata("design:paramtypes", [core_1.Reflector,
+        auth_service_1.AuthService])
 ], JwtAuthGuard);
 //# sourceMappingURL=jwt-auth.guard.js.map

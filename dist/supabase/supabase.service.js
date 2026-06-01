@@ -8,17 +8,26 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var SupabaseService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SupabaseService = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_js_1 = require("@supabase/supabase-js");
-let SupabaseService = class SupabaseService {
+let SupabaseService = SupabaseService_1 = class SupabaseService {
+    logger = new common_1.Logger(SupabaseService_1.name);
     client;
     adminClient;
     constructor() {
         const url = process.env.SUPABASE_URL;
         const anonKey = process.env.SUPABASE_ANON_KEY;
         const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!url)
+            throw new Error('Missing env var: SUPABASE_URL');
+        if (!anonKey)
+            throw new Error('Missing env var: SUPABASE_ANON_KEY');
+        if (!serviceRoleKey) {
+            this.logger.warn('SUPABASE_SERVICE_ROLE_KEY is not set — admin client will use anon key (RLS enforced)');
+        }
         this.client = (0, supabase_js_1.createClient)(url, anonKey);
         this.adminClient = (0, supabase_js_1.createClient)(url, serviceRoleKey ?? anonKey, {
             auth: { autoRefreshToken: false, persistSession: false },
@@ -32,7 +41,7 @@ let SupabaseService = class SupabaseService {
     }
 };
 exports.SupabaseService = SupabaseService;
-exports.SupabaseService = SupabaseService = __decorate([
+exports.SupabaseService = SupabaseService = SupabaseService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [])
 ], SupabaseService);

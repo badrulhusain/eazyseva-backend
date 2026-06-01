@@ -20,7 +20,7 @@ exports.AuthModule = AuthModule = __decorate([
         imports: [passport_1.PassportModule.register({ defaultStrategy: 'supabase-jwt' })],
         controllers: [auth_controller_1.AuthController],
         providers: [auth_service_1.AuthService, supabase_jwt_strategy_1.SupabaseJwtStrategy],
-        exports: [passport_1.PassportModule, supabase_jwt_strategy_1.SupabaseJwtStrategy],
+        exports: [auth_service_1.AuthService, passport_1.PassportModule, supabase_jwt_strategy_1.SupabaseJwtStrategy],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

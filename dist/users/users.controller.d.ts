@@ -6,10 +6,24 @@ export declare class UsersController {
     constructor(usersService: UsersService);
     getMe(user: CurrentUserType): Promise<{
         success: boolean;
-        data: any;
+        data: {
+            id: any;
+            email: any;
+            role: any;
+            full_name: any;
+            phone: any;
+            created_at: any;
+        };
     }>;
     updateMe(user: CurrentUserType, dto: UpdateProfileDto): Promise<{
         success: boolean;
-        data: any;
+        data: {
+            id: any;
+            email: any;
+            role: any;
+            full_name: any;
+            phone: any;
+            created_at: any;
+        };
     }>;
 }

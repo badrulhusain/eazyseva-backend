@@ -13,10 +13,10 @@ exports.SupabaseJwtStrategy = void 0;
 const common_1 = require("@nestjs/common");
 const passport_1 = require("@nestjs/passport");
 const passport_jwt_1 = require("passport-jwt");
-const supabase_service_1 = require("../../supabase/supabase.service");
+const auth_service_1 = require("../auth.service");
 let SupabaseJwtStrategy = class SupabaseJwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy, 'supabase-jwt') {
-    supabaseService;
-    constructor(supabaseService) {
+    authService;
+    constructor(authService) {
         const secret = process.env.SUPABASE_JWT_SECRET;
         if (!secret)
             throw new Error('SUPABASE_JWT_SECRET is not set');
@@ -25,49 +25,22 @@ let SupabaseJwtStrategy = class SupabaseJwtStrategy extends (0, passport_1.Passp
             ignoreExpiration: false,
             secretOrKey: secret,
         });
-        this.supabaseService = supabaseService;
+        this.authService = authService;
     }
     async validate(payload) {
-        const { data: profile, error } = await this.supabaseService.admin
-            .from('profiles')
-            .select('id, email, role, full_name, phone')
-            .eq('id', payload.sub)
-            .single();
-        if (profile) {
-            return {
-                id: profile.id,
-                email: profile.email,
-                role: profile.role,
-                full_name: profile.full_name ?? null,
-                phone: profile.phone ?? null,
-            };
-        }
-        if (error?.code !== 'PGRST116') {
-            throw new common_1.UnauthorizedException({
-                code: 'PROFILE_LOOKUP_FAILED',
-                message: error?.message ?? 'Unable to load user profile',
-            });
-        }
-        const fallbackUser = {
+        return this.authService.resolveCurrentUser({
             id: payload.sub,
             email: payload.email,
-            role: 'USER',
-            full_name: payload.user_metadata?.full_name ?? null,
-            phone: payload.user_metadata?.phone ?? null,
-        };
-        await this.supabaseService.admin.from('profiles').upsert({
-            id: fallbackUser.id,
-            email: fallbackUser.email,
-            role: fallbackUser.role,
-            full_name: fallbackUser.full_name,
-            phone: fallbackUser.phone,
-        }, { onConflict: 'id' });
-        return fallbackUser;
+            user_metadata: {
+                full_name: payload.user_metadata?.full_name,
+                phone: payload.user_metadata?.phone,
+            },
+        });
     }
 };
 exports.SupabaseJwtStrategy = SupabaseJwtStrategy;
 exports.SupabaseJwtStrategy = SupabaseJwtStrategy = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [supabase_service_1.SupabaseService])
+    __metadata("design:paramtypes", [auth_service_1.AuthService])
 ], SupabaseJwtStrategy);
 //# sourceMappingURL=supabase-jwt.strategy.js.map
