@@ -15,9 +15,18 @@ async function bootstrap() {
         logger: ['error', 'warn', 'log'],
     });
     app.use((0, helmet_1.default)());
-    const allowedOrigin = process.env.CLIENT_URL ?? 'http://localhost:5173';
+    const allowedOrigins = (process.env.CLIENT_URLS ?? process.env.CLIENT_URL ?? 'http://localhost:5173')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
     app.enableCors({
-        origin: allowedOrigin,
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+                return;
+            }
+            callback(new Error());
+        },
         credentials: true,
         methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
