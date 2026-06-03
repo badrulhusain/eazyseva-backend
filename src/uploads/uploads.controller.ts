@@ -11,10 +11,12 @@ import {
   UseFilters,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { UploadsService } from './uploads.service';
 import { MulterExceptionFilter } from './filters/multer-exception.filter';
+import { DeleteDocumentDto } from './dto/delete-document.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUser as CurrentUserType } from '../common/types/current-user.type';
 
@@ -46,6 +48,7 @@ export class UploadsController {
    */
   @Post('document')
   @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @UseInterceptors(
     FileInterceptor('file', {
       // memoryStorage keeps the file in RAM — no local disk I/O.
@@ -92,28 +95,19 @@ export class UploadsController {
   @Delete('document')
   @HttpCode(HttpStatus.OK)
   async deleteDocument(
-    @Query('publicId') publicId: string,
-    @Query('resourceType') resourceType: 'image' | 'raw' = 'image',
+    @Query() query: DeleteDocumentDto,
     @CurrentUser() user: CurrentUserType,
   ) {
-    if (!publicId) {
-      throw new BadRequestException({
-        code: 'MISSING_PUBLIC_ID',
-        message: '"publicId" query parameter is required',
-      });
-    }
-
     // Ownership check: publicId must belong to the requesting user's folder.
-    // Cloudinary public IDs for this app are always: ezyseva/documents/{userId}/{filename}
     const expectedPrefix = `${DOCUMENT_FOLDER}/${user.id}/`;
-    if (!publicId.startsWith(expectedPrefix)) {
+    if (!query.publicId.startsWith(expectedPrefix)) {
       throw new ForbiddenException({
         code: 'FORBIDDEN',
         message: 'You do not have permission to delete this file',
       });
     }
 
-    await this.uploadsService.deleteDocument(publicId, resourceType);
+    await this.uploadsService.deleteDocument(query.publicId, query.resourceType);
     return { success: true, message: 'File deleted successfully' };
   }
 }

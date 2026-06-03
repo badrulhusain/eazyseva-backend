@@ -2,9 +2,11 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { OrdersService } from '../orders/orders.service';
 import type { ServiceCategory, ServiceListItem, ServiceItem } from './services.types';
 import type { CreateServiceDto } from './dto/create-service.dto';
 import type { UpdateServiceDto } from './dto/update-service.dto';
@@ -17,7 +19,12 @@ const DETAIL_COLUMNS =
 
 @Injectable()
 export class ServicesService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  private readonly logger = new Logger(ServicesService.name);
+
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly ordersService: OrdersService,
+  ) {}
 
   async findAll(category?: ServiceCategory): Promise<ServiceListItem[]> {
     let query = this.supabaseService.admin
@@ -101,6 +108,8 @@ export class ServicesService {
         message: error?.message ?? 'Failed to create service',
       });
     }
+    this.logger.log(`Service created: ${data.id} slug=${dto.slug}`);
+    this.ordersService.invalidateServiceCache(dto.slug);
     return data;
   }
 
@@ -146,6 +155,9 @@ export class ServicesService {
     if (error || !data) {
       throw new NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
     }
+    this.logger.log(`Service updated: ${id}`);
+    // Invalidate by slug (new or old) so prices are fresh immediately
+    if (dto.slug) this.ordersService.invalidateServiceCache(dto.slug);
     return data;
   }
 
@@ -160,6 +172,9 @@ export class ServicesService {
     if (error || !data) {
       throw new NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
     }
+    this.logger.log(`Service soft-deleted: ${id}`);
+    // Slug unknown at this point — clear the whole cache to be safe
+    this.ordersService.invalidateServiceCache();
     return { deleted: true, id };
   }
 }

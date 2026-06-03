@@ -66,7 +66,9 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 message: error?.message ?? 'Failed to create order',
             });
         }
-        return OrdersService_1.formatRow(data);
+        const order = OrdersService_1.formatRow(data);
+        this.logger.log(`Order created: ${order.orderNumber} user=${userId} total=${total}`);
+        return order;
     }
     async findMyOrders(userId) {
         const { data, error } = await this.supabaseService.admin
@@ -139,6 +141,14 @@ let OrdersService = OrdersService_1 = class OrdersService {
             throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
         }
         return OrdersService_1.formatRow(data);
+    }
+    invalidateServiceCache(slug) {
+        if (slug) {
+            this.servicesCache.delete(slug);
+        }
+        else {
+            this.servicesCache.clear();
+        }
     }
     async getServiceBySlug(slug) {
         const cached = this.servicesCache.get(slug);

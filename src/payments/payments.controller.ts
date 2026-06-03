@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
 import { StartDemoPaymentDto } from './dto/start-demo-payment.dto';
 import { ConfirmDemoPaymentDto } from './dto/confirm-demo-payment.dto';
@@ -22,6 +23,7 @@ export class PaymentsController {
   /** POST /api/v1/payments/demo/start — Initiate a demo payment session */
   @Post('start')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   startPayment(
     @Body() dto: StartDemoPaymentDto,
     @CurrentUser() user: CurrentUserType,

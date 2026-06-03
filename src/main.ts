@@ -2,6 +2,7 @@ import 'dotenv/config';
 import helmet from 'helmet';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
@@ -41,6 +42,18 @@ async function bootstrap() {
 
   // ── Exception filter ────────────────────────────────────────────────────────
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // ── Swagger (disabled in production to avoid exposing internals) ────────────
+  if (process.env.NODE_ENV !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('EazySeva API')
+      .setDescription('Government services platform — prototype API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   // ── Start ───────────────────────────────────────────────────────────────────
   const port = process.env.PORT ?? 3000;

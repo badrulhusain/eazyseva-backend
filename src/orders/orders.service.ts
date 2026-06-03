@@ -84,7 +84,9 @@ export class OrdersService {
       });
     }
 
-    return OrdersService.formatRow(data as OrderRow);
+    const order = OrdersService.formatRow(data as OrderRow);
+    this.logger.log(`Order created: ${order.orderNumber} user=${userId} total=${total}`);
+    return order;
   }
 
   // ── User: list own orders ─────────────────────────────────────────
@@ -193,6 +195,15 @@ export class OrdersService {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────
+
+  /** Call after an admin creates/updates/deletes a service so stale prices aren't used. */
+  invalidateServiceCache(slug?: string): void {
+    if (slug) {
+      this.servicesCache.delete(slug);
+    } else {
+      this.servicesCache.clear();
+    }
+  }
 
   private async getServiceBySlug(slug: string) {
     const cached = this.servicesCache.get(slug);

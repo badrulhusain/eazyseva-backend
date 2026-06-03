@@ -20,6 +20,7 @@ export declare class OrdersService {
     }>;
     findOneAdmin(id: string): Promise<Order>;
     updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<Order>;
+    invalidateServiceCache(slug?: string): void;
     private getServiceBySlug;
     private static formatRow;
 }

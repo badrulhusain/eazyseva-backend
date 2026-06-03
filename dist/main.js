@@ -7,6 +7,7 @@ require("dotenv/config");
 const helmet_1 = __importDefault(require("helmet"));
 const core_1 = require("@nestjs/core");
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const app_module_1 = require("./app.module");
 const http_exception_filter_1 = require("./common/filters/http-exception.filter");
 async function bootstrap() {
@@ -30,6 +31,16 @@ async function bootstrap() {
         transformOptions: { enableImplicitConversion: true },
     }));
     app.useGlobalFilters(new http_exception_filter_1.AllExceptionsFilter());
+    if (process.env.NODE_ENV !== 'production') {
+        const swaggerConfig = new swagger_1.DocumentBuilder()
+            .setTitle('EazySeva API')
+            .setDescription('Government services platform — prototype API')
+            .setVersion('1.0')
+            .addBearerAuth()
+            .build();
+        const document = swagger_1.SwaggerModule.createDocument(app, swaggerConfig);
+        swagger_1.SwaggerModule.setup('api/docs', app, document);
+    }
     const port = process.env.PORT ?? 3000;
     await app.listen(port);
     app.enableShutdownHooks();

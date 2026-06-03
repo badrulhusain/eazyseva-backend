@@ -19,6 +19,7 @@ exports.OrdersModule = OrdersModule = __decorate([
         imports: [supabase_module_1.SupabaseModule],
         controllers: [orders_controller_1.OrdersController, orders_controller_1.AdminOrdersController],
         providers: [orders_service_1.OrdersService],
+        exports: [orders_service_1.OrdersService],
     })
 ], OrdersModule);
 //# sourceMappingURL=orders.module.js.map

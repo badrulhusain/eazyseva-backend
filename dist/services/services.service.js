@@ -8,16 +8,21 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var ServicesService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ServicesService = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../supabase/supabase.service");
+const orders_service_1 = require("../orders/orders.service");
 const LIST_COLUMNS = 'id, title, slug, category, price, govt_fee, processing_fee, delivery_days_min, delivery_days_max, icon, is_popular';
 const DETAIL_COLUMNS = 'id, title, slug, description, category, price, govt_fee, processing_fee, delivery_days_min, delivery_days_max, required_documents, icon, is_popular, is_active, created_at, updated_at';
-let ServicesService = class ServicesService {
+let ServicesService = ServicesService_1 = class ServicesService {
     supabaseService;
-    constructor(supabaseService) {
+    ordersService;
+    logger = new common_1.Logger(ServicesService_1.name);
+    constructor(supabaseService, ordersService) {
         this.supabaseService = supabaseService;
+        this.ordersService = ordersService;
     }
     async findAll(category) {
         let query = this.supabaseService.admin
@@ -93,6 +98,8 @@ let ServicesService = class ServicesService {
                 message: error?.message ?? 'Failed to create service',
             });
         }
+        this.logger.log(`Service created: ${data.id} slug=${dto.slug}`);
+        this.ordersService.invalidateServiceCache(dto.slug);
         return data;
     }
     async update(id, dto) {
@@ -146,6 +153,9 @@ let ServicesService = class ServicesService {
         if (error || !data) {
             throw new common_1.NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
         }
+        this.logger.log(`Service updated: ${id}`);
+        if (dto.slug)
+            this.ordersService.invalidateServiceCache(dto.slug);
         return data;
     }
     async softDelete(id) {
@@ -158,12 +168,15 @@ let ServicesService = class ServicesService {
         if (error || !data) {
             throw new common_1.NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
         }
+        this.logger.log(`Service soft-deleted: ${id}`);
+        this.ordersService.invalidateServiceCache();
         return { deleted: true, id };
     }
 };
 exports.ServicesService = ServicesService;
-exports.ServicesService = ServicesService = __decorate([
+exports.ServicesService = ServicesService = ServicesService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [supabase_service_1.SupabaseService])
+    __metadata("design:paramtypes", [supabase_service_1.SupabaseService,
+        orders_service_1.OrdersService])
 ], ServicesService);
 //# sourceMappingURL=services.service.js.map
