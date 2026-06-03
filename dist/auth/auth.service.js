@@ -8,15 +8,20 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var AuthService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../supabase/supabase.service");
-let AuthService = class AuthService {
+let AuthService = AuthService_1 = class AuthService {
     supabaseService;
+    logger = new common_1.Logger(AuthService_1.name);
     constructor(supabaseService) {
         this.supabaseService = supabaseService;
     }
+    tokenCache = new Map();
+    TOKEN_CACHE_TTL = 60_000;
+    TOKEN_CACHE_MAX = 500;
     async register(dto) {
         const { data, error } = await this.supabaseService.admin.auth.admin.createUser({
             email: dto.email,
@@ -32,8 +37,10 @@ let AuthService = class AuthService {
             if (msg.includes('already') || msg.includes('email') && msg.includes('registered')) {
                 throw new common_1.ConflictException({ code: 'EMAIL_TAKEN', message: 'Email is already registered' });
             }
+            this.logger.error(`Registration failed for ${dto.email}: ${error.message}`);
             throw new common_1.InternalServerErrorException({ code: 'REGISTER_FAILED', message: error.message });
         }
+        this.logger.log(`User registered: ${data.user.id}`);
         const { error: profileError } = await this.supabaseService.admin
             .from('profiles')
             .upsert({
@@ -85,14 +92,39 @@ let AuthService = class AuthService {
         return { success: true, data: user };
     }
     async getUserFromAccessToken(token) {
+        const cached = this.tokenCache.get(token);
+        if (cached && cached.expiresAt > Date.now()) {
+            return cached.user;
+        }
         const { data, error } = await this.supabaseService.supabase.auth.getUser(token);
         if (error || !data.user) {
+            this.tokenCache.delete(token);
             throw new common_1.UnauthorizedException({
                 code: 'UNAUTHORIZED',
                 message: 'Login required',
             });
         }
-        return this.resolveCurrentUser(data.user);
+        const user = await this.resolveCurrentUser(data.user);
+        this.cacheToken(token, user);
+        return user;
+    }
+    cacheToken(token, user) {
+        if (this.tokenCache.size >= this.TOKEN_CACHE_MAX) {
+            const now = Date.now();
+            let evictedExpired = false;
+            for (const [k, v] of this.tokenCache) {
+                if (v.expiresAt <= now) {
+                    this.tokenCache.delete(k);
+                    evictedExpired = true;
+                }
+            }
+            if (!evictedExpired) {
+                const oldest = this.tokenCache.keys().next().value;
+                if (oldest !== undefined)
+                    this.tokenCache.delete(oldest);
+            }
+        }
+        this.tokenCache.set(token, { user, expiresAt: Date.now() + this.TOKEN_CACHE_TTL });
     }
     async resolveCurrentUser(user) {
         const { data: profile, error } = await this.supabaseService.admin
@@ -133,7 +165,7 @@ let AuthService = class AuthService {
     }
 };
 exports.AuthService = AuthService;
-exports.AuthService = AuthService = __decorate([
+exports.AuthService = AuthService = AuthService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [supabase_service_1.SupabaseService])
 ], AuthService);

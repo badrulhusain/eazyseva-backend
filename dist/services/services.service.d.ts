@@ -6,6 +6,7 @@ export declare class ServicesService {
     private readonly supabaseService;
     constructor(supabaseService: SupabaseService);
     findAll(category?: ServiceCategory): Promise<ServiceListItem[]>;
+    findAllAdmin(): Promise<ServiceItem[]>;
     findBySlug(slug: string): Promise<ServiceItem>;
     create(dto: CreateServiceDto): Promise<any>;
     update(id: string, dto: UpdateServiceDto): Promise<any>;

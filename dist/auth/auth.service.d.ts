@@ -5,7 +5,11 @@ import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 export declare class AuthService {
     private readonly supabaseService;
+    private readonly logger;
     constructor(supabaseService: SupabaseService);
+    private readonly tokenCache;
+    private readonly TOKEN_CACHE_TTL;
+    private readonly TOKEN_CACHE_MAX;
     register(dto: RegisterDto): Promise<{
         success: boolean;
         data: {
@@ -29,5 +33,6 @@ export declare class AuthService {
         data: CurrentUser;
     };
     getUserFromAccessToken(token: string): Promise<CurrentUser>;
+    private cacheToken;
     resolveCurrentUser(user: Pick<User, 'id' | 'email' | 'user_metadata'>): Promise<CurrentUser>;
 }

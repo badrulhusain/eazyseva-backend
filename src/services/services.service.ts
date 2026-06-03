@@ -36,6 +36,17 @@ export class ServicesService {
     return data ?? [];
   }
 
+  async findAllAdmin(): Promise<ServiceItem[]> {
+    const { data, error } = await this.supabaseService.admin
+      .from('services')
+      .select(DETAIL_COLUMNS)
+      .order('is_popular', { ascending: false })
+      .order('title', { ascending: true });
+
+    if (error) throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+    return data ?? [];
+  }
+
   async findBySlug(slug: string): Promise<ServiceItem> {
     const { data, error } = await this.supabaseService.admin
       .from('services')
@@ -72,14 +83,14 @@ export class ServicesService {
         description: dto.description ?? null,
         category: dto.category,
         price: dto.price,
-        govt_fee: dto.govt_fee ?? 0,
-        processing_fee: dto.processing_fee ?? 0,
-        delivery_days_min: dto.delivery_days_min ?? 1,
-        delivery_days_max: dto.delivery_days_max ?? 7,
-        required_documents: dto.required_documents ?? [],
+        govt_fee: dto.govtFee ?? 0,
+        processing_fee: dto.processingFee ?? 0,
+        delivery_days_min: dto.deliveryDaysMin ?? 1,
+        delivery_days_max: dto.deliveryDaysMax ?? 7,
+        required_documents: dto.requiredDocuments ?? [],
         icon: dto.icon ?? null,
-        is_popular: dto.is_popular ?? false,
-        is_active: dto.is_active ?? true,
+        is_popular: dto.isPopular ?? false,
+        is_active: dto.isActive ?? true,
       })
       .select()
       .single();
@@ -110,9 +121,24 @@ export class ServicesService {
       }
     }
 
+    const patch: Record<string, unknown> = {};
+    if (dto.title !== undefined) patch.title = dto.title;
+    if (dto.slug !== undefined) patch.slug = dto.slug;
+    if (dto.description !== undefined) patch.description = dto.description;
+    if (dto.category !== undefined) patch.category = dto.category;
+    if (dto.price !== undefined) patch.price = dto.price;
+    if (dto.govtFee !== undefined) patch.govt_fee = dto.govtFee;
+    if (dto.processingFee !== undefined) patch.processing_fee = dto.processingFee;
+    if (dto.deliveryDaysMin !== undefined) patch.delivery_days_min = dto.deliveryDaysMin;
+    if (dto.deliveryDaysMax !== undefined) patch.delivery_days_max = dto.deliveryDaysMax;
+    if (dto.requiredDocuments !== undefined) patch.required_documents = dto.requiredDocuments;
+    if (dto.icon !== undefined) patch.icon = dto.icon;
+    if (dto.isPopular !== undefined) patch.is_popular = dto.isPopular;
+    if (dto.isActive !== undefined) patch.is_active = dto.isActive;
+
     const { data, error } = await this.supabaseService.admin
       .from('services')
-      .update(dto)
+      .update(patch)
       .eq('id', id)
       .select()
       .single();

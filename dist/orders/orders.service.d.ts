@@ -5,7 +5,10 @@ import type { Order } from './orders.types';
 import type { PaginationDto } from '../common/dto/pagination.dto';
 export declare class OrdersService {
     private readonly supabaseService;
+    private readonly logger;
     constructor(supabaseService: SupabaseService);
+    private readonly servicesCache;
+    private readonly SERVICES_CACHE_TTL;
     create(dto: CreateOrderDto, userId: string): Promise<Order>;
     findMyOrders(userId: string): Promise<Order[]>;
     findOne(id: string, userId: string): Promise<Order>;
@@ -17,5 +20,6 @@ export declare class OrdersService {
     }>;
     findOneAdmin(id: string): Promise<Order>;
     updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<Order>;
+    private getServiceBySlug;
     private static formatRow;
 }

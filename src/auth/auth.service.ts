@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { User } from '@supabase/supabase-js';
@@ -12,7 +13,14 @@ import type { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   constructor(private readonly supabaseService: SupabaseService) {}
+
+  // In-process cache: avoids 2 Supabase RTTs (auth.getUser + profiles SELECT) on every
+  // authenticated request. TTL of 60s is short enough to pick up bans/role changes quickly.
+  private readonly tokenCache = new Map<string, { user: CurrentUser; expiresAt: number }>();
+  private readonly TOKEN_CACHE_TTL = 60_000;
+  private readonly TOKEN_CACHE_MAX = 500;
 
   async register(dto: RegisterDto) {
     const { data, error } = await this.supabaseService.admin.auth.admin.createUser({
@@ -30,8 +38,11 @@ export class AuthService {
       if (msg.includes('already') || msg.includes('email') && msg.includes('registered')) {
         throw new ConflictException({ code: 'EMAIL_TAKEN', message: 'Email is already registered' });
       }
+      this.logger.error(`Registration failed for ${dto.email}: ${error.message}`);
       throw new InternalServerErrorException({ code: 'REGISTER_FAILED', message: error.message });
     }
+
+    this.logger.log(`User registered: ${data.user.id}`);
 
     const { error: profileError } = await this.supabaseService.admin
       .from('profiles')
@@ -95,16 +106,43 @@ export class AuthService {
   }
 
   async getUserFromAccessToken(token: string): Promise<CurrentUser> {
+    const cached = this.tokenCache.get(token);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.user;
+    }
+
     const { data, error } = await this.supabaseService.supabase.auth.getUser(token);
 
     if (error || !data.user) {
+      this.tokenCache.delete(token);
       throw new UnauthorizedException({
         code: 'UNAUTHORIZED',
         message: 'Login required',
       });
     }
 
-    return this.resolveCurrentUser(data.user);
+    const user = await this.resolveCurrentUser(data.user);
+    this.cacheToken(token, user);
+    return user;
+  }
+
+  private cacheToken(token: string, user: CurrentUser): void {
+    if (this.tokenCache.size >= this.TOKEN_CACHE_MAX) {
+      const now = Date.now();
+      let evictedExpired = false;
+      for (const [k, v] of this.tokenCache) {
+        if (v.expiresAt <= now) {
+          this.tokenCache.delete(k);
+          evictedExpired = true;
+        }
+      }
+      // If no expired entries, evict the oldest (first-inserted) entry to stay bounded.
+      if (!evictedExpired) {
+        const oldest = this.tokenCache.keys().next().value;
+        if (oldest !== undefined) this.tokenCache.delete(oldest);
+      }
+    }
+    this.tokenCache.set(token, { user, expiresAt: Date.now() + this.TOKEN_CACHE_TTL });
   }
 
   async resolveCurrentUser(user: Pick<User, 'id' | 'email' | 'user_metadata'>): Promise<CurrentUser> {

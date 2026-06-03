@@ -8,6 +8,7 @@ import {
   IsString,
   IsUrl,
   Matches,
+  MaxLength,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -16,6 +17,7 @@ export class CustomerDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
+  @MaxLength(200)
   name: string;
 
   @Matches(/^[6-9]\d{9}$/, {
@@ -28,12 +30,14 @@ export class CustomerDto {
 
   @IsString()
   @MinLength(10)
+  @MaxLength(500)
   address: string;
 }
 
 export class DocumentDto {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   name: string;
 
   // Must be a valid HTTPS URL — prevents raw strings from being stored as document references
@@ -44,22 +48,27 @@ export class DocumentDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(500)
   publicId?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(255)
   label?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(255)
   originalName?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(50)
   resourceType?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(50)
   format?: string;
 
   @IsNumber()
@@ -89,10 +98,9 @@ export class PriceDto {
 }
 
 export class CreateOrderDto {
-  // Must match an active service slug in the services table.
-  // Backend validates existence and fetches prices server-side.
   @IsString()
   @IsNotEmpty()
+  @MaxLength(200)
   serviceType: string;
 
   @ValidateNested()

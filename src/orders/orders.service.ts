@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -12,7 +13,16 @@ import type { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
   constructor(private readonly supabaseService: SupabaseService) {}
+
+  // Services table changes rarely (admin-only writes). Cache for 30 seconds to stay
+  // within one price-update cycle while avoiding a Supabase RTT on every order.
+  private readonly servicesCache = new Map<string, {
+    data: { id: string; price: number; govt_fee: number; processing_fee: number } | null;
+    expiresAt: number;
+  }>();
+  private readonly SERVICES_CACHE_TTL = 30_000;
 
   // ── User: create order ────────────────────────────────────────────
 
@@ -20,16 +30,7 @@ export class OrdersService {
     // ── Server-side price lookup from service catalog ──────────────
     // Never trust price values from the frontend. Prices come from the
     // services table only. serviceType must match an active service slug.
-    const { data: service, error: svcError } = await this.supabaseService.admin
-      .from('services')
-      .select('id, price, govt_fee, processing_fee')
-      .eq('slug', dto.serviceType)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (svcError) {
-      throw new InternalServerErrorException({ code: 'DB_ERROR', message: svcError.message });
-    }
+    const service = await this.getServiceBySlug(dto.serviceType);
 
     if (!service) {
       throw new BadRequestException({
@@ -40,8 +41,8 @@ export class OrdersService {
 
     const governmentFee = Number(service.govt_fee ?? 0);
     const serviceCharge = Number(service.processing_fee ?? 0);
-    const documentHandling = 0; // Extend in Phase 4 if needed
-    const total = Number(service.price ?? governmentFee + serviceCharge);
+    const documentHandling = 0;
+    const total = Number(service.price) + governmentFee + serviceCharge + documentHandling;
 
     // ── Generate unique order number (atomic, race-condition safe) ──
     const { data: orderNumber, error: seqError } =
@@ -192,6 +193,25 @@ export class OrdersService {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────
+
+  private async getServiceBySlug(slug: string) {
+    const cached = this.servicesCache.get(slug);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+    const { data, error } = await this.supabaseService.admin
+      .from('services')
+      .select('id, price, govt_fee, processing_fee')
+      .eq('slug', slug)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+    }
+
+    this.servicesCache.set(slug, { data: data ?? null, expiresAt: Date.now() + this.SERVICES_CACHE_TTL });
+    return data ?? null;
+  }
 
   private static formatRow(row: OrderRow): Order {
     return {

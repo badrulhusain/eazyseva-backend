@@ -6,6 +6,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -16,8 +17,13 @@ import { DemoPaymentMethod } from './enums/demo-payment-method.enum';
 import { DemoPaymentResult } from './enums/demo-payment-result.enum';
 import type { OrderRow } from '../orders/orders.types';
 
+// Sessions stuck in PAYMENT_PENDING longer than this are auto-reset on the
+// next start attempt so users don't have to call /reset manually.
+const PAYMENT_PENDING_TIMEOUT_MS = 15 * 60_000;
+
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
   constructor(private readonly supabaseService: SupabaseService) {}
 
   // ── POST /payments/demo/start ──────────────────────────────────
@@ -33,10 +39,19 @@ export class PaymentsService {
     }
 
     if (order.payment_status === PaymentStatus.PAYMENT_PENDING) {
-      throw new BadRequestException({
-        code: 'PAYMENT_IN_PROGRESS',
-        message: 'A payment is already in progress. Confirm or retry the existing session.',
-      });
+      const sessionAge = Date.now() - new Date(order.updated_at).getTime();
+      if (sessionAge < PAYMENT_PENDING_TIMEOUT_MS) {
+        throw new BadRequestException({
+          code: 'PAYMENT_IN_PROGRESS',
+          message: 'A payment is already in progress. Confirm or retry the existing session.',
+        });
+      }
+      // Session is stale — auto-reset so the user can start fresh without calling /reset
+      this.logger.warn(`Auto-resetting stale PAYMENT_PENDING session for order ${dto.orderId}`);
+      await this.supabaseService.admin
+        .from('orders')
+        .update({ payment_status: PaymentStatus.NOT_PAID, demo_transaction_id: null, payment_method: null })
+        .eq('id', dto.orderId);
     }
 
     const demoTransactionId = this.generateDemoTransactionId();
@@ -59,6 +74,8 @@ export class PaymentsService {
     if (error) {
       throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
     }
+
+    this.logger.log(`Payment started: order=${dto.orderId} txn=${demoTransactionId} method=${dto.method}`);
 
     return {
       success: true,
@@ -128,6 +145,10 @@ export class PaymentsService {
     }
 
     const row = data as OrderRow;
+
+    this.logger.log(
+      `Payment ${isSuccess ? 'succeeded' : 'failed'}: order=${dto.orderId} txn=${dto.demoTransactionId}`,
+    );
 
     return {
       success: true,
@@ -278,7 +299,10 @@ export class PaymentsService {
   private async findOrderForUser(orderId: string, userId: string): Promise<OrderRow> {
     const { data, error } = await this.supabaseService.admin
       .from('orders')
-      .select('*')
+      .select(
+        'id, order_number, user_id, price_total, payment_status, payment_method, ' +
+        'demo_transaction_id, payment_currency, paid_at, payment_failure_reason, timeline, updated_at',
+      )
       .eq('id', orderId)
       .single();
 
@@ -286,7 +310,7 @@ export class PaymentsService {
       throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found.' });
     }
 
-    const row = data as OrderRow;
+    const row = data as unknown as OrderRow;
 
     // Return 404 (not 403) to avoid leaking that another user's order exists
     if (row.user_id !== userId) {

@@ -11,6 +11,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdateServiceDto = void 0;
 const class_validator_1 = require("class-validator");
+const class_transformer_1 = require("class-transformer");
+const create_service_dto_1 = require("./create-service.dto");
 const SERVICE_CATEGORIES = [
     'ID_CARD',
     'CERTIFICATE',
@@ -28,14 +30,14 @@ class UpdateServiceDto {
     description;
     category;
     price;
-    govt_fee;
-    processing_fee;
-    delivery_days_min;
-    delivery_days_max;
-    required_documents;
+    govtFee;
+    processingFee;
+    deliveryDaysMin;
+    deliveryDaysMax;
+    requiredDocuments;
     icon;
-    is_popular;
-    is_active;
+    isPopular;
+    isActive;
 }
 exports.UpdateServiceDto = UpdateServiceDto;
 __decorate([
@@ -72,31 +74,32 @@ __decorate([
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
-], UpdateServiceDto.prototype, "govt_fee", void 0);
+], UpdateServiceDto.prototype, "govtFee", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
-], UpdateServiceDto.prototype, "processing_fee", void 0);
+], UpdateServiceDto.prototype, "processingFee", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),
     __metadata("design:type", Number)
-], UpdateServiceDto.prototype, "delivery_days_min", void 0);
+], UpdateServiceDto.prototype, "deliveryDaysMin", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),
     __metadata("design:type", Number)
-], UpdateServiceDto.prototype, "delivery_days_max", void 0);
+], UpdateServiceDto.prototype, "deliveryDaysMax", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.IsString)({ each: true }),
+    (0, class_validator_1.ValidateNested)({ each: true }),
+    (0, class_transformer_1.Type)(() => create_service_dto_1.RequiredDocumentDto),
     __metadata("design:type", Array)
-], UpdateServiceDto.prototype, "required_documents", void 0);
+], UpdateServiceDto.prototype, "requiredDocuments", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -107,10 +110,10 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
-], UpdateServiceDto.prototype, "is_popular", void 0);
+], UpdateServiceDto.prototype, "isPopular", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
-], UpdateServiceDto.prototype, "is_active", void 0);
+], UpdateServiceDto.prototype, "isActive", void 0);
 //# sourceMappingURL=update-service.dto.js.map

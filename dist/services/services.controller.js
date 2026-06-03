@@ -59,6 +59,10 @@ let AdminServicesController = class AdminServicesController {
     constructor(servicesService) {
         this.servicesService = servicesService;
     }
+    async findAll() {
+        const data = await this.servicesService.findAllAdmin();
+        return { success: true, data };
+    }
     async create(dto) {
         const data = await this.servicesService.create(dto);
         return { success: true, data };
@@ -73,6 +77,12 @@ let AdminServicesController = class AdminServicesController {
     }
 };
 exports.AdminServicesController = AdminServicesController;
+__decorate([
+    (0, common_1.Get)(),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AdminServicesController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),

@@ -7,7 +7,10 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { RequiredDocumentDto } from './create-service.dto';
 import type { ServiceCategory } from '../services.types';
 
 const SERVICE_CATEGORIES = [
@@ -50,27 +53,28 @@ export class UpdateServiceDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  govt_fee?: number;
+  govtFee?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
-  processing_fee?: number;
+  processingFee?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
-  delivery_days_min?: number;
+  deliveryDaysMin?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
-  delivery_days_max?: number;
+  deliveryDaysMax?: number;
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  required_documents?: string[];
+  @ValidateNested({ each: true })
+  @Type(() => RequiredDocumentDto)
+  requiredDocuments?: RequiredDocumentDto[];
 
   @IsOptional()
   @IsString()
@@ -79,9 +83,9 @@ export class UpdateServiceDto {
 
   @IsOptional()
   @IsBoolean()
-  is_popular?: boolean;
+  isPopular?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  is_active?: boolean;
+  isActive?: boolean;
 }

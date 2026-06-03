@@ -23,6 +23,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.MinLength)(3),
+    (0, class_validator_1.MaxLength)(200),
     __metadata("design:type", String)
 ], CustomerDto.prototype, "name", void 0);
 __decorate([
@@ -38,6 +39,7 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(10),
+    (0, class_validator_1.MaxLength)(500),
     __metadata("design:type", String)
 ], CustomerDto.prototype, "address", void 0);
 class DocumentDto {
@@ -54,6 +56,7 @@ exports.DocumentDto = DocumentDto;
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.MaxLength)(255),
     __metadata("design:type", String)
 ], DocumentDto.prototype, "name", void 0);
 __decorate([
@@ -65,26 +68,31 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(500),
     __metadata("design:type", String)
 ], DocumentDto.prototype, "publicId", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(255),
     __metadata("design:type", String)
 ], DocumentDto.prototype, "label", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(255),
     __metadata("design:type", String)
 ], DocumentDto.prototype, "originalName", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(50),
     __metadata("design:type", String)
 ], DocumentDto.prototype, "resourceType", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.MaxLength)(50),
     __metadata("design:type", String)
 ], DocumentDto.prototype, "format", void 0);
 __decorate([
@@ -129,6 +137,7 @@ exports.CreateOrderDto = CreateOrderDto;
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.MaxLength)(200),
     __metadata("design:type", String)
 ], CreateOrderDto.prototype, "serviceType", void 0);
 __decorate([

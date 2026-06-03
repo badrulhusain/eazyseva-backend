@@ -8,7 +8,9 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import type { ServiceCategory } from '../services.types';
 
 const SERVICE_CATEGORIES = [
@@ -22,6 +24,15 @@ const SERVICE_CATEGORIES = [
   'FORM_FILLING',
   'GOVERNMENT_SCHEME',
 ] as const;
+
+export class RequiredDocumentDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsBoolean()
+  isRequired: boolean;
+}
 
 export class CreateServiceDto {
   @IsString()
@@ -49,27 +60,28 @@ export class CreateServiceDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  govt_fee?: number;
+  govtFee?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
-  processing_fee?: number;
+  processingFee?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
-  delivery_days_min?: number;
+  deliveryDaysMin?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
-  delivery_days_max?: number;
+  deliveryDaysMax?: number;
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  required_documents?: string[];
+  @ValidateNested({ each: true })
+  @Type(() => RequiredDocumentDto)
+  requiredDocuments?: RequiredDocumentDto[];
 
   @IsOptional()
   @IsString()
@@ -78,9 +90,9 @@ export class CreateServiceDto {
 
   @IsOptional()
   @IsBoolean()
-  is_popular?: boolean;
+  isPopular?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  is_active?: boolean;
+  isActive?: boolean;
 }

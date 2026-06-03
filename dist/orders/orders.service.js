@@ -15,19 +15,14 @@ const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../supabase/supabase.service");
 let OrdersService = OrdersService_1 = class OrdersService {
     supabaseService;
+    logger = new common_1.Logger(OrdersService_1.name);
     constructor(supabaseService) {
         this.supabaseService = supabaseService;
     }
+    servicesCache = new Map();
+    SERVICES_CACHE_TTL = 30_000;
     async create(dto, userId) {
-        const { data: service, error: svcError } = await this.supabaseService.admin
-            .from('services')
-            .select('id, price, govt_fee, processing_fee')
-            .eq('slug', dto.serviceType)
-            .eq('is_active', true)
-            .maybeSingle();
-        if (svcError) {
-            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: svcError.message });
-        }
+        const service = await this.getServiceBySlug(dto.serviceType);
         if (!service) {
             throw new common_1.BadRequestException({
                 code: 'INVALID_SERVICE',
@@ -37,7 +32,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
         const governmentFee = Number(service.govt_fee ?? 0);
         const serviceCharge = Number(service.processing_fee ?? 0);
         const documentHandling = 0;
-        const total = Number(service.price ?? governmentFee + serviceCharge);
+        const total = Number(service.price) + governmentFee + serviceCharge + documentHandling;
         const { data: orderNumber, error: seqError } = await this.supabaseService.admin.rpc('next_order_number');
         if (seqError || !orderNumber) {
             throw new common_1.InternalServerErrorException({
@@ -144,6 +139,22 @@ let OrdersService = OrdersService_1 = class OrdersService {
             throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
         }
         return OrdersService_1.formatRow(data);
+    }
+    async getServiceBySlug(slug) {
+        const cached = this.servicesCache.get(slug);
+        if (cached && cached.expiresAt > Date.now())
+            return cached.data;
+        const { data, error } = await this.supabaseService.admin
+            .from('services')
+            .select('id, price, govt_fee, processing_fee')
+            .eq('slug', slug)
+            .eq('is_active', true)
+            .maybeSingle();
+        if (error) {
+            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+        }
+        this.servicesCache.set(slug, { data: data ?? null, expiresAt: Date.now() + this.SERVICES_CACHE_TTL });
+        return data ?? null;
     }
     static formatRow(row) {
         return {

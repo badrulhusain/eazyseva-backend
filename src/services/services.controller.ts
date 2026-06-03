@@ -41,6 +41,12 @@ export class ServicesController {
 export class AdminServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
+  @Get()
+  async findAll() {
+    const data = await this.servicesService.findAllAdmin();
+    return { success: true, data };
+  }
+
   @Post()
   async create(@Body() dto: CreateServiceDto) {
     const data = await this.servicesService.create(dto);

@@ -17,6 +17,10 @@ export declare class ServicesController {
 export declare class AdminServicesController {
     private readonly servicesService;
     constructor(servicesService: ServicesService);
+    findAll(): Promise<{
+        success: boolean;
+        data: import("./services.types").ServiceItem[];
+    }>;
     create(dto: CreateServiceDto): Promise<{
         success: boolean;
         data: any;

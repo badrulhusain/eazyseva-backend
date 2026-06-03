@@ -1,3 +1,4 @@
+import { RequiredDocumentDto } from './create-service.dto';
 import type { ServiceCategory } from '../services.types';
 export declare class UpdateServiceDto {
     title?: string;
@@ -5,12 +6,12 @@ export declare class UpdateServiceDto {
     description?: string;
     category?: ServiceCategory;
     price?: number;
-    govt_fee?: number;
-    processing_fee?: number;
-    delivery_days_min?: number;
-    delivery_days_max?: number;
-    required_documents?: string[];
+    govtFee?: number;
+    processingFee?: number;
+    deliveryDaysMin?: number;
+    deliveryDaysMax?: number;
+    requiredDocuments?: RequiredDocumentDto[];
     icon?: string;
-    is_popular?: boolean;
-    is_active?: boolean;
+    isPopular?: boolean;
+    isActive?: boolean;
 }
