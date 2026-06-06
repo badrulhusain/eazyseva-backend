@@ -13,12 +13,27 @@ exports.UpdateOrderStatusDto = void 0;
 const class_validator_1 = require("class-validator");
 class UpdateOrderStatusDto {
     status;
+    reason;
+    adminNote;
 }
 exports.UpdateOrderStatusDto = UpdateOrderStatusDto;
 __decorate([
-    (0, class_validator_1.IsEnum)(['PENDING', 'PROCESSING', 'COMPLETED', 'REJECTED'], {
-        message: 'status must be one of: PENDING, PROCESSING, COMPLETED, REJECTED',
+    (0, class_validator_1.IsEnum)(['PENDING', 'ACCEPTED', 'PROCESSING', 'COMPLETED', 'REJECTED'], {
+        message: 'status must be one of: PENDING, ACCEPTED, PROCESSING, COMPLETED, REJECTED',
     }),
     __metadata("design:type", String)
 ], UpdateOrderStatusDto.prototype, "status", void 0);
+__decorate([
+    (0, class_validator_1.ValidateIf)((o) => o.status === 'REJECTED'),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)({ message: 'reason is required when rejecting an order' }),
+    (0, class_validator_1.MaxLength)(500, { message: 'reason must not exceed 500 characters' }),
+    __metadata("design:type", String)
+], UpdateOrderStatusDto.prototype, "reason", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(1000, { message: 'adminNote must not exceed 1000 characters' }),
+    __metadata("design:type", String)
+], UpdateOrderStatusDto.prototype, "adminNote", void 0);
 //# sourceMappingURL=update-order-status.dto.js.map

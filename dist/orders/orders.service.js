@@ -17,9 +17,27 @@ const ORDER_FULL_COLS = 'id, order_number, user_id, service_type, customer_name,
     'customer_dob, customer_address, documents, price_government_fee, ' +
     'price_service_charge, price_document_handling, price_total, status, ' +
     'payment_status, payment_method, demo_transaction_id, payment_currency, ' +
-    'paid_at, payment_failure_reason, timeline, created_at, updated_at';
+    'paid_at, payment_failure_reason, timeline, ' +
+    'rejection_reason, admin_note, reviewed_by, reviewed_at, ' +
+    'created_at, updated_at';
 const ORDER_LIST_COLS = 'id, order_number, service_type, customer_name, customer_phone, status, ' +
     'payment_status, price_total, created_at, updated_at';
+const STATUS_TRANSITIONS = {
+    PENDING: ['ACCEPTED', 'REJECTED'],
+    ACCEPTED: ['PROCESSING'],
+    PROCESSING: ['COMPLETED'],
+    COMPLETED: [],
+    REJECTED: [],
+};
+function buildTimelineEvent(status, reason) {
+    switch (status) {
+        case 'ACCEPTED': return 'Order accepted by admin';
+        case 'PROCESSING': return 'Order is being processed';
+        case 'COMPLETED': return 'Order completed';
+        case 'REJECTED': return reason ? `Order rejected: ${reason}` : 'Order rejected';
+        default: return `Status changed to ${status}`;
+    }
+}
 let OrdersService = OrdersService_1 = class OrdersService {
     supabaseService;
     logger = new common_1.Logger(OrdersService_1.name);
@@ -95,7 +113,14 @@ let OrdersService = OrdersService_1 = class OrdersService {
             .eq('id', id)
             .eq('user_id', userId)
             .single();
-        if (error || !data) {
+        if (error) {
+            if (error.code === 'PGRST116') {
+                throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+            }
+            this.logger.error(`findOne db error id=${id} uid=${userId}: [${error.code}] ${error.message}`);
+            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+        }
+        if (!data) {
             throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
         }
         return OrdersService_1.formatRow(data);
@@ -129,22 +154,64 @@ let OrdersService = OrdersService_1 = class OrdersService {
             .select(ORDER_FULL_COLS)
             .eq('id', id)
             .single();
-        if (error || !data) {
+        if (error) {
+            if (error.code === 'PGRST116') {
+                throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+            }
+            this.logger.error(`findOneAdmin db error id=${id}: [${error.code}] ${error.message}`);
+            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+        }
+        if (!data) {
             throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
         }
         return OrdersService_1.formatRow(data);
     }
-    async updateStatus(id, dto) {
+    async updateStatus(id, dto, adminId) {
+        const current = await this.findOneAdmin(id);
+        this.assertValidTransition(current.status, dto.status);
+        if (dto.status === 'REJECTED' && !dto.reason?.trim()) {
+            throw new common_1.BadRequestException({
+                code: 'REASON_REQUIRED',
+                message: 'A rejection reason is required when rejecting an order',
+            });
+        }
+        const now = new Date().toISOString();
+        const timelineEntry = {
+            event: buildTimelineEvent(dto.status, dto.reason),
+            timestamp: now,
+        };
+        const newTimeline = [...(current.timeline ?? []), timelineEntry];
+        const updatePayload = {
+            status: dto.status,
+            timeline: newTimeline,
+            reviewed_by: adminId,
+            reviewed_at: now,
+        };
+        if (dto.status === 'REJECTED') {
+            updatePayload.rejection_reason = dto.reason.trim();
+        }
+        if (dto.adminNote?.trim()) {
+            updatePayload.admin_note = dto.adminNote.trim();
+        }
         const { data, error } = await this.supabaseService.admin
             .from('orders')
-            .update({ status: dto.status })
+            .update(updatePayload)
             .eq('id', id)
             .select(ORDER_FULL_COLS)
             .single();
-        if (error || !data) {
+        if (error) {
+            if (error.code === 'PGRST116') {
+                throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+            }
+            this.logger.error(`updateStatus db error id=${id}: [${error.code}] ${error.message}`);
+            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+        }
+        if (!data) {
             throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
         }
-        return OrdersService_1.formatRow(data);
+        const updated = OrdersService_1.formatRow(data);
+        this.logger.log(`Order ${updated.orderNumber} status: ${current.status} → ${dto.status} by admin=${adminId}`);
+        return updated;
     }
     invalidateServiceCache(slug) {
         if (slug) {
@@ -152,6 +219,18 @@ let OrdersService = OrdersService_1 = class OrdersService {
         }
         else {
             this.servicesCache.clear();
+        }
+    }
+    assertValidTransition(current, next) {
+        const allowed = STATUS_TRANSITIONS[current];
+        if (!allowed.includes(next)) {
+            const terminalMsg = allowed.length === 0
+                ? `Status "${current}" is final and cannot be changed.`
+                : `Cannot transition from "${current}" to "${next}". Allowed: ${allowed.join(', ')}.`;
+            throw new common_1.BadRequestException({
+                code: 'INVALID_STATUS_TRANSITION',
+                message: terminalMsg,
+            });
         }
     }
     async getServiceBySlug(slug) {
@@ -200,6 +279,10 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 failureReason: row.payment_failure_reason ?? null,
             },
             timeline: row.timeline ?? [],
+            rejectionReason: row.rejection_reason ?? null,
+            adminNote: row.admin_note ?? null,
+            reviewedBy: row.reviewed_by ?? null,
+            reviewedAt: row.reviewed_at ?? null,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         };

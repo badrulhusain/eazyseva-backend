@@ -83,8 +83,8 @@ let AdminOrdersController = class AdminOrdersController {
         const data = await this.ordersService.findOneAdmin(id);
         return { success: true, data };
     }
-    async updateStatus(id, dto) {
-        const data = await this.ordersService.updateStatus(id, dto);
+    async updateStatus(id, dto, user) {
+        const data = await this.ordersService.updateStatus(id, dto, user.id);
         return { success: true, data };
     }
 };
@@ -107,8 +107,9 @@ __decorate([
     (0, common_1.Patch)(':id/status'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, update_order_status_dto_1.UpdateOrderStatusDto]),
+    __metadata("design:paramtypes", [String, update_order_status_dto_1.UpdateOrderStatusDto, Object]),
     __metadata("design:returntype", Promise)
 ], AdminOrdersController.prototype, "updateStatus", null);
 exports.AdminOrdersController = AdminOrdersController = __decorate([

@@ -85,8 +85,9 @@ export class AdminOrdersController {
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateOrderStatusDto,
+    @CurrentUser() user: CurrentUserType,
   ) {
-    const data = await this.ordersService.updateStatus(id, dto);
+    const data = await this.ordersService.updateStatus(id, dto, user.id);
     return { success: true, data };
   }
 }

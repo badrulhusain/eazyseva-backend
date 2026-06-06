@@ -5,4 +5,6 @@ export class UploadResponseDto {
   format: string;
   bytes: number;
   resourceType: string;
+  width?: number;
+  height?: number;
 }

@@ -19,8 +19,9 @@ export declare class OrdersService {
         limit: number;
     }>;
     findOneAdmin(id: string): Promise<Order>;
-    updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<Order>;
+    updateStatus(id: string, dto: UpdateOrderStatusDto, adminId: string): Promise<Order>;
     invalidateServiceCache(slug?: string): void;
+    private assertValidTransition;
     private getServiceBySlug;
     private static formatRow;
     private static formatListRow;

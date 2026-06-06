@@ -17,8 +17,8 @@ export class PaginationDto {
   limit: number = 20;
 
   @IsOptional()
-  @IsEnum(['PENDING', 'PROCESSING', 'COMPLETED', 'REJECTED'], {
-    message: 'status must be one of: PENDING, PROCESSING, COMPLETED, REJECTED',
+  @IsEnum(['PENDING', 'ACCEPTED', 'PROCESSING', 'COMPLETED', 'REJECTED'], {
+    message: 'status must be one of: PENDING, ACCEPTED, PROCESSING, COMPLETED, REJECTED',
   })
   status?: OrderStatus;
 }

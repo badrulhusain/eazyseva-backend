@@ -8,23 +8,49 @@ import {
 import { SupabaseService } from '../supabase/supabase.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import type { UpdateOrderStatusDto } from './dto/update-order-status.dto';
-import type { AdminOrderSummary, Order, OrderRow } from './orders.types';
+import type {
+  AdminOrderSummary,
+  Order,
+  OrderRow,
+  OrderStatus,
+  TimelineEntry,
+} from './orders.types';
 import type { PaginationDto } from '../common/dto/pagination.dto';
 
 // Columns fetched for user-facing single order and my-orders list.
-// Includes all fields that formatRow() needs.
 const ORDER_FULL_COLS =
   'id, order_number, user_id, service_type, customer_name, customer_phone, ' +
   'customer_dob, customer_address, documents, price_government_fee, ' +
   'price_service_charge, price_document_handling, price_total, status, ' +
   'payment_status, payment_method, demo_transaction_id, payment_currency, ' +
-  'paid_at, payment_failure_reason, timeline, created_at, updated_at';
+  'paid_at, payment_failure_reason, timeline, ' +
+  'rejection_reason, admin_note, reviewed_by, reviewed_at, ' +
+  'created_at, updated_at';
 
 // Lightweight columns for admin list — avoids sending documents/timeline JSON
 // over the wire for every row in a paginated list.
 const ORDER_LIST_COLS =
   'id, order_number, service_type, customer_name, customer_phone, status, ' +
   'payment_status, price_total, created_at, updated_at';
+
+// Valid forward transitions. Both terminal states map to empty arrays.
+const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  PENDING:    ['ACCEPTED', 'REJECTED'],
+  ACCEPTED:   ['PROCESSING'],
+  PROCESSING: ['COMPLETED'],
+  COMPLETED:  [],
+  REJECTED:   [],
+};
+
+function buildTimelineEvent(status: OrderStatus, reason?: string): string {
+  switch (status) {
+    case 'ACCEPTED':   return 'Order accepted by admin';
+    case 'PROCESSING': return 'Order is being processed';
+    case 'COMPLETED':  return 'Order completed';
+    case 'REJECTED':   return reason ? `Order rejected: ${reason}` : 'Order rejected';
+    default:           return `Status changed to ${status}`;
+  }
+}
 
 @Injectable()
 export class OrdersService {
@@ -132,7 +158,15 @@ export class OrdersService {
       .eq('user_id', userId)
       .single();
 
-    if (error || !data) {
+    if (error) {
+      if (error.code === 'PGRST116') {
+        throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+      }
+      this.logger.error(`findOne db error id=${id} uid=${userId}: [${error.code}] ${error.message}`);
+      throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+    }
+
+    if (!data) {
       throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
     }
 
@@ -185,28 +219,90 @@ export class OrdersService {
       .eq('id', id)
       .single();
 
-    if (error || !data) {
+    if (error) {
+      // PGRST116 = PostgREST "no rows returned" for .single() — genuine 404.
+      // Any other code is a real DB/schema error that must surface as 500.
+      if (error.code === 'PGRST116') {
+        throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+      }
+      this.logger.error(`findOneAdmin db error id=${id}: [${error.code}] ${error.message}`);
+      throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+    }
+
+    if (!data) {
       throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
     }
 
     return OrdersService.formatRow(data as unknown as OrderRow);
   }
 
-  // ── Admin: update status ──────────────────────────────────────────
+  // ── Admin: update status with review workflow ─────────────────────
 
-  async updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<Order> {
+  async updateStatus(
+    id: string,
+    dto: UpdateOrderStatusDto,
+    adminId: string,
+  ): Promise<Order> {
+    // Fetch current order to validate the transition.
+    const current = await this.findOneAdmin(id);
+
+    this.assertValidTransition(current.status, dto.status);
+
+    // Belt-and-suspenders guard: DTO @ValidateIf handles HTTP, this covers
+    // any direct programmatic call.
+    if (dto.status === 'REJECTED' && !dto.reason?.trim()) {
+      throw new BadRequestException({
+        code: 'REASON_REQUIRED',
+        message: 'A rejection reason is required when rejecting an order',
+      });
+    }
+
+    const now = new Date().toISOString();
+    const timelineEntry: TimelineEntry = {
+      event: buildTimelineEvent(dto.status, dto.reason),
+      timestamp: now,
+    };
+    const newTimeline = [...(current.timeline ?? []), timelineEntry];
+
+    const updatePayload: Record<string, unknown> = {
+      status: dto.status,
+      timeline: newTimeline,
+      reviewed_by: adminId,
+      reviewed_at: now,
+    };
+
+    if (dto.status === 'REJECTED') {
+      updatePayload.rejection_reason = dto.reason!.trim();
+    }
+
+    if (dto.adminNote?.trim()) {
+      updatePayload.admin_note = dto.adminNote.trim();
+    }
+
     const { data, error } = await this.supabaseService.admin
       .from('orders')
-      .update({ status: dto.status })
+      .update(updatePayload)
       .eq('id', id)
       .select(ORDER_FULL_COLS)
       .single();
 
-    if (error || !data) {
+    if (error) {
+      if (error.code === 'PGRST116') {
+        throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+      }
+      this.logger.error(`updateStatus db error id=${id}: [${error.code}] ${error.message}`);
+      throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+    }
+
+    if (!data) {
       throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
     }
 
-    return OrdersService.formatRow(data as unknown as OrderRow);
+    const updated = OrdersService.formatRow(data as unknown as OrderRow);
+    this.logger.log(
+      `Order ${updated.orderNumber} status: ${current.status} → ${dto.status} by admin=${adminId}`,
+    );
+    return updated;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────
@@ -217,6 +313,19 @@ export class OrdersService {
       this.servicesCache.delete(slug);
     } else {
       this.servicesCache.clear();
+    }
+  }
+
+  private assertValidTransition(current: OrderStatus, next: OrderStatus): void {
+    const allowed = STATUS_TRANSITIONS[current];
+    if (!allowed.includes(next)) {
+      const terminalMsg = allowed.length === 0
+        ? `Status "${current}" is final and cannot be changed.`
+        : `Cannot transition from "${current}" to "${next}". Allowed: ${allowed.join(', ')}.`;
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: terminalMsg,
+      });
     }
   }
 
@@ -269,6 +378,10 @@ export class OrdersService {
         failureReason: row.payment_failure_reason ?? null,
       },
       timeline: row.timeline ?? [],
+      rejectionReason: row.rejection_reason ?? null,
+      adminNote: row.admin_note ?? null,
+      reviewedBy: row.reviewed_by ?? null,
+      reviewedAt: row.reviewed_at ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

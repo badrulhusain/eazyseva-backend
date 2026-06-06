@@ -1,4 +1,4 @@
-export type OrderStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
+export type OrderStatus = 'PENDING' | 'ACCEPTED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
 export type PaymentStatus = 'NOT_PAID' | 'PAYMENT_PENDING' | 'PAID' | 'FAILED';
 export type DemoPaymentMethod = 'DEMO_UPI' | 'DEMO_CARD' | 'DEMO_CASH' | 'PAY_LATER';
 export interface OrderDocument {
@@ -42,6 +42,10 @@ export interface Order {
     paymentStatus: PaymentStatus;
     payment: OrderPayment;
     timeline: TimelineEntry[];
+    rejectionReason: string | null;
+    adminNote: string | null;
+    reviewedBy: string | null;
+    reviewedAt: string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -79,6 +83,10 @@ export interface OrderRow {
     paid_at: string | null;
     payment_failure_reason: string | null;
     timeline: TimelineEntry[];
+    rejection_reason: string | null;
+    admin_note: string | null;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
     created_at: string;
     updated_at: string;
 }

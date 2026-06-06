@@ -33,7 +33,7 @@ export declare class AdminOrdersController {
         success: boolean;
         data: import("./orders.types").Order;
     }>;
-    updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<{
+    updateStatus(id: string, dto: UpdateOrderStatusDto, user: CurrentUserType): Promise<{
         success: boolean;
         data: import("./orders.types").Order;
     }>;

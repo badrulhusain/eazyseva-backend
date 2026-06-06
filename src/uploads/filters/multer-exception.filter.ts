@@ -27,11 +27,11 @@ export class MulterExceptionFilter implements ExceptionFilter {
         break;
       case 'LIMIT_UNEXPECTED_FILE':
         code = 'UNEXPECTED_FIELD';
-        message = 'Unexpected file field. Use field name "file"';
+        message = 'Unexpected file field. Use field name "file" or "files" depending on the endpoint.';
         break;
       case 'LIMIT_FILE_COUNT':
         code = 'TOO_MANY_FILES';
-        message = 'Only one file may be uploaded per request';
+        message = 'Too many files uploaded. Check the endpoint limit.';
         break;
       default:
         status = HttpStatus.INTERNAL_SERVER_ERROR;

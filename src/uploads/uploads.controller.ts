@@ -9,11 +9,12 @@ import {
   Query,
   Req,
   UploadedFile,
+  UploadedFiles,
   UseFilters,
   UseInterceptors,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import type { Request } from 'express';
 import { UploadsService } from './uploads.service';
@@ -26,8 +27,11 @@ import type { CurrentUser as CurrentUserType } from '../common/types/current-use
 // The same value is re-validated inside UploadsService before touching Cloudinary.
 const MAX_FILE_SIZE_BYTES = parseInt(process.env.MAX_FILE_SIZE_MB ?? '5', 10) * 1024 * 1024;
 
-// Cloudinary public IDs for this app always follow: ezyseva/documents/{userId}/...
+// Cloudinary public IDs for this app always follow: ezyseva/{folder}/{userId}/...
 const DOCUMENT_FOLDER = 'ezyseva/documents';
+const ORDER_DOCUMENT_FOLDER = 'ezyseva/order-documents';
+
+const MAX_ORDER_DOCUMENTS = 5;
 
 @Controller('uploads')
 @UseFilters(MulterExceptionFilter)
@@ -70,11 +74,47 @@ export class UploadsController {
     if (!file) {
       throw new BadRequestException({
         code: 'NO_FILE',
-        message: 'No file was uploaded. Attach the file using field name "file"',
+        message: 'No file was uploaded. Attach the file using field name "file".',
       });
     }
 
     const data = await this.uploadsService.uploadDocument(file, user.id, req.requestId);
+    return { success: true, data };
+  }
+
+  /**
+   * POST /api/v1/uploads/order-documents
+   *
+   * Accepts 1–5 files (field name "files") for an order submission.
+   * Images are stored with a Cloudinary transformation (800px width limit,
+   * quality auto:good, fetch_format auto). PDFs are stored as raw resources
+   * without transformation.
+   *
+   * Validations applied per file:
+   *   - MIME type: image/jpeg, image/png, image/webp, application/pdf
+   *   - Size: ≤ MAX_FILE_SIZE_MB (default 5 MB)
+   *   - Not empty (size > 0)
+   *
+   * Returns an array of upload results including width/height for images.
+   */
+  @Post('order-documents')
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @UseInterceptors(
+    FilesInterceptor('files', MAX_ORDER_DOCUMENTS, {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: MAX_FILE_SIZE_BYTES,
+        files: MAX_ORDER_DOCUMENTS,
+      },
+    }),
+  )
+  async uploadOrderDocuments(
+    @UploadedFiles() files: Express.Multer.File[],
+    @CurrentUser() user: CurrentUserType,
+    @Req() req: Request,
+  ) {
+    const data = await this.uploadsService.uploadOrderDocuments(files, user.id, req.requestId);
     return { success: true, data };
   }
 
@@ -84,8 +124,9 @@ export class UploadsController {
    * Cleans up a previously uploaded file from Cloudinary.
    *
    * Ownership is enforced: the publicId must start with
-   * "ezyseva/documents/{current-user-id}/" so users cannot delete each
-   * other's files.
+   * "ezyseva/documents/{current-user-id}/" or
+   * "ezyseva/order-documents/{current-user-id}/" so users cannot delete
+   * each other's files.
    */
   @Delete('document')
   @HttpCode(HttpStatus.OK)
@@ -93,11 +134,15 @@ export class UploadsController {
     @Query() query: DeleteDocumentDto,
     @CurrentUser() user: CurrentUserType,
   ) {
-    const expectedPrefix = `${DOCUMENT_FOLDER}/${user.id}/`;
-    if (!query.publicId.startsWith(expectedPrefix)) {
+    const ownedPrefixes = [
+      `${DOCUMENT_FOLDER}/${user.id}/`,
+      `${ORDER_DOCUMENT_FOLDER}/${user.id}/`,
+    ];
+
+    if (!ownedPrefixes.some((prefix) => query.publicId.startsWith(prefix))) {
       throw new ForbiddenException({
         code: 'FORBIDDEN',
-        message: 'You do not have permission to delete this file',
+        message: 'You do not have permission to delete this file.',
       });
     }
 
