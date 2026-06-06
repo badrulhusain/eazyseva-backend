@@ -65,7 +65,9 @@ export class AdminOrdersController {
   /**
    * GET /api/v1/admin/orders?page=1&limit=20&status=PENDING
    *
-   * Paginated list. Max 100 rows per page to prevent huge payloads.
+   * Paginated list — lightweight columns only.
+   * Max 100 rows per page (enforced by PaginationDto @Max(100)).
+   * Use GET /admin/orders/:id for full order detail including documents/timeline.
    */
   @Get()
   async findAll(@Query() query: PaginationDto) {

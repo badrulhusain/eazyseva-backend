@@ -1,7 +1,10 @@
-// VIRTUAL PAYMENT PROTOTYPE
-// This module simulates payment flow for demo/client purposes only.
-// No real money is collected. No real gateway is used.
-// Phase 4 replacement: swap SupabaseService calls below with Razorpay SDK.
+// ── VIRTUAL PAYMENT PROTOTYPE ─────────────────────────────────────────────────
+// This module simulates a payment flow for demo / client-presentation purposes
+// ONLY. No real money is collected. No real payment gateway is used.
+// To integrate a real gateway (Razorpay, Stripe, etc.) replace the methods
+// below with SDK calls and update the payment_status enum accordingly.
+// ─────────────────────────────────────────────────────────────────────────────
+import { randomBytes } from 'crypto';
 import {
   BadRequestException,
   Injectable,
@@ -327,10 +330,13 @@ export class PaymentsService {
     return [...(existing ?? []), { event, timestamp: new Date().toISOString() }];
   }
 
-  // Phase 4: replace this with the real gateway's order/payment ID
+  // Generates a collision-resistant demo transaction ID using crypto.randomBytes
+  // (4 bytes = 2^32 possible values) instead of Math.random() which has a weaker
+  // PRNG and higher collision probability under load.
+  // Replace with the real gateway's order/payment ID when integrating.
   private generateDemoTransactionId(): string {
     const year = new Date().getFullYear();
-    const seq = String(Math.floor(10000 + Math.random() * 90000));
-    return `DEMO-TXN-${year}-${seq}`;
+    const suffix = randomBytes(4).readUInt32BE(0).toString(36).toUpperCase().padStart(7, '0');
+    return `DEMO-TXN-${year}-${suffix}`;
   }
 }

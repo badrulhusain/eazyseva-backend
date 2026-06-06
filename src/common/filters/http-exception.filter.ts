@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
+const IS_PROD = process.env.NODE_ENV === 'production';
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
@@ -17,6 +19,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
+    const rid = request.requestId ?? '-';
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let code = 'INTERNAL_ERROR';
     let message = 'An unexpected error occurred';
@@ -34,21 +37,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = exception.message;
       }
 
-      // Log all 5xx HttpExceptions — these are server bugs, not client errors
       if (status >= 500) {
         this.logger.error(
-          `[${status}] ${code}: ${message} — ${request.method} ${request.url}`,
-          exception.stack,
+          `[${status}] ${code}: ${message} — ${request.method} ${request.url} rid=${rid}`,
+          IS_PROD ? undefined : exception.stack,
         );
       }
     } else if (exception instanceof Error) {
       this.logger.error(
-        `Unhandled error: ${exception.message} — ${request.method} ${request.url}`,
-        exception.stack,
+        `Unhandled error: ${exception.message} — ${request.method} ${request.url} rid=${rid}`,
+        IS_PROD ? undefined : exception.stack,
       );
     } else {
       this.logger.error(
-        `Unknown exception — ${request.method} ${request.url}`,
+        `Unknown exception — ${request.method} ${request.url} rid=${rid}`,
         String(exception),
       );
     }
@@ -59,6 +61,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message,
       path: request.url,
       timestamp: new Date().toISOString(),
+      requestId: rid,
     });
   }
 

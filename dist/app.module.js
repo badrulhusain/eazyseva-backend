@@ -20,7 +20,9 @@ const services_module_1 = require("./services/services.module");
 const orders_module_1 = require("./orders/orders.module");
 const uploads_module_1 = require("./uploads/uploads.module");
 const payments_module_1 = require("./payments/payments.module");
+const health_module_1 = require("./health/health.module");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
+const request_id_middleware_1 = require("./common/middleware/request-id.middleware");
 const request_logger_middleware_1 = require("./common/middleware/request-logger.middleware");
 function validateEnv(config) {
     const required = [
@@ -40,7 +42,9 @@ function validateEnv(config) {
 }
 let AppModule = class AppModule {
     configure(consumer) {
-        consumer.apply(request_logger_middleware_1.RequestLoggerMiddleware).forRoutes('*');
+        consumer
+            .apply(request_id_middleware_1.RequestIdMiddleware, request_logger_middleware_1.RequestLoggerMiddleware)
+            .forRoutes('*');
     }
 };
 exports.AppModule = AppModule;
@@ -61,6 +65,7 @@ exports.AppModule = AppModule = __decorate([
             orders_module_1.OrdersModule,
             uploads_module_1.UploadsModule,
             payments_module_1.PaymentsModule,
+            health_module_1.HealthModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

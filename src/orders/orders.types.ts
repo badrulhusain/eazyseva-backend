@@ -36,6 +36,7 @@ export interface TimelineEntry {
   timestamp: string;
 }
 
+/** Full order shape — returned by single-order endpoints. */
 export interface Order {
   id: string;
   orderNumber: string;
@@ -48,6 +49,24 @@ export interface Order {
   paymentStatus: PaymentStatus;
   payment: OrderPayment;
   timeline: TimelineEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Lightweight summary returned by admin list endpoint.
+ * Omits documents, timeline, and payment details to keep list payloads small.
+ * Call GET /admin/orders/:id for the full Order shape.
+ */
+export interface AdminOrderSummary {
+  id: string;
+  orderNumber: string;
+  serviceType: string;
+  customerName: string;
+  customerPhone: string;
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  priceTotal: number;
   createdAt: string;
   updatedAt: string;
 }

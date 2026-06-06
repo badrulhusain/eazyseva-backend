@@ -11,7 +11,9 @@ import { ServicesModule } from './services/services.module';
 import { OrdersModule } from './orders/orders.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { PaymentsModule } from './payments/payments.module';
+import { HealthModule } from './health/health.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 
 function validateEnv(config: Record<string, unknown>) {
@@ -54,6 +56,7 @@ function validateEnv(config: Record<string, unknown>) {
     OrdersModule,
     UploadsModule,
     PaymentsModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
@@ -66,6 +69,10 @@ function validateEnv(config: Record<string, unknown>) {
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+    // RequestIdMiddleware MUST run first so every subsequent middleware and
+    // guard can read req.requestId.
+    consumer
+      .apply(RequestIdMiddleware, RequestLoggerMiddleware)
+      .forRoutes('*');
   }
 }

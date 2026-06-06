@@ -45,6 +45,18 @@ export interface Order {
     createdAt: string;
     updatedAt: string;
 }
+export interface AdminOrderSummary {
+    id: string;
+    orderNumber: string;
+    serviceType: string;
+    customerName: string;
+    customerPhone: string;
+    status: OrderStatus;
+    paymentStatus: PaymentStatus;
+    priceTotal: number;
+    createdAt: string;
+    updatedAt: string;
+}
 export interface OrderRow {
     id: string;
     order_number: string;

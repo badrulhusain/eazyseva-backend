@@ -8,8 +8,23 @@ import {
 import { SupabaseService } from '../supabase/supabase.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import type { UpdateOrderStatusDto } from './dto/update-order-status.dto';
-import type { Order, OrderRow } from './orders.types';
+import type { AdminOrderSummary, Order, OrderRow } from './orders.types';
 import type { PaginationDto } from '../common/dto/pagination.dto';
+
+// Columns fetched for user-facing single order and my-orders list.
+// Includes all fields that formatRow() needs.
+const ORDER_FULL_COLS =
+  'id, order_number, user_id, service_type, customer_name, customer_phone, ' +
+  'customer_dob, customer_address, documents, price_government_fee, ' +
+  'price_service_charge, price_document_handling, price_total, status, ' +
+  'payment_status, payment_method, demo_transaction_id, payment_currency, ' +
+  'paid_at, payment_failure_reason, timeline, created_at, updated_at';
+
+// Lightweight columns for admin list — avoids sending documents/timeline JSON
+// over the wire for every row in a paginated list.
+const ORDER_LIST_COLS =
+  'id, order_number, service_type, customer_name, customer_phone, status, ' +
+  'payment_status, price_total, created_at, updated_at';
 
 @Injectable()
 export class OrdersService {
@@ -94,7 +109,7 @@ export class OrdersService {
   async findMyOrders(userId: string): Promise<Order[]> {
     const { data, error } = await this.supabaseService.admin
       .from('orders')
-      .select('*')
+      .select(ORDER_FULL_COLS)
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -102,44 +117,44 @@ export class OrdersService {
       throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
     }
 
-    return ((data ?? []) as OrderRow[]).map(OrdersService.formatRow);
+    return ((data ?? []) as unknown as OrderRow[]).map(OrdersService.formatRow);
   }
 
   // ── User: get single order ────────────────────────────────────────
 
   async findOne(id: string, userId: string): Promise<Order> {
+    // Filter by both id AND user_id in one query — return 404 for both
+    // "not found" and "owned by another user" to avoid leaking existence.
     const { data, error } = await this.supabaseService.admin
       .from('orders')
-      .select('*')
+      .select(ORDER_FULL_COLS)
       .eq('id', id)
+      .eq('user_id', userId)
       .single();
 
     if (error || !data) {
       throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
     }
 
-    const row = data as OrderRow;
-
-    // Return 404 (not 403) to avoid leaking that another user's order exists
-    if (row.user_id !== userId) {
-      throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
-    }
-
-    return OrdersService.formatRow(row);
+    return OrdersService.formatRow(data as unknown as OrderRow);
   }
 
   // ── Admin: paginated list ─────────────────────────────────────────
 
   async findAll(
     pagination: PaginationDto,
-  ): Promise<{ data: Order[]; total: number; page: number; limit: number }> {
+  ): Promise<{ data: AdminOrderSummary[]; total: number; page: number; limit: number }> {
     const { page, limit, status } = pagination;
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
+    // Use lightweight column list — full order data is available via findOneAdmin.
+    // count:'planned' uses the PostgreSQL query planner's row estimate; it is
+    // instantaneous but may differ from the exact count by a few percent.
+    // Acceptable for pagination UI; use count:'exact' if you need precise counts.
     let query = this.supabaseService.admin
       .from('orders')
-      .select('*', { count: 'exact' })
+      .select(ORDER_LIST_COLS, { count: 'planned' })
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -154,19 +169,19 @@ export class OrdersService {
     }
 
     return {
-      data: ((data ?? []) as OrderRow[]).map(OrdersService.formatRow),
+      data: ((data ?? []) as unknown as Partial<OrderRow>[]).map(OrdersService.formatListRow),
       total: count ?? 0,
       page,
       limit,
     };
   }
 
-  // ── Admin: single order ───────────────────────────────────────────
+  // ── Admin: single order (full detail) ────────────────────────────
 
   async findOneAdmin(id: string): Promise<Order> {
     const { data, error } = await this.supabaseService.admin
       .from('orders')
-      .select('*')
+      .select(ORDER_FULL_COLS)
       .eq('id', id)
       .single();
 
@@ -174,7 +189,7 @@ export class OrdersService {
       throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
     }
 
-    return OrdersService.formatRow(data as OrderRow);
+    return OrdersService.formatRow(data as unknown as OrderRow);
   }
 
   // ── Admin: update status ──────────────────────────────────────────
@@ -184,14 +199,14 @@ export class OrdersService {
       .from('orders')
       .update({ status: dto.status })
       .eq('id', id)
-      .select()
+      .select(ORDER_FULL_COLS)
       .single();
 
     if (error || !data) {
       throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
     }
 
-    return OrdersService.formatRow(data as OrderRow);
+    return OrdersService.formatRow(data as unknown as OrderRow);
   }
 
   // ── Helpers ───────────────────────────────────────────────────────
@@ -256,6 +271,21 @@ export class OrdersService {
       timeline: row.timeline ?? [],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+    };
+  }
+
+  private static formatListRow(row: Partial<OrderRow>): AdminOrderSummary {
+    return {
+      id: row.id!,
+      orderNumber: row.order_number!,
+      serviceType: row.service_type!,
+      customerName: row.customer_name!,
+      customerPhone: row.customer_phone!,
+      status: row.status!,
+      paymentStatus: row.payment_status!,
+      priceTotal: Number(row.price_total),
+      createdAt: row.created_at!,
+      updatedAt: row.updated_at!,
     };
   }
 }

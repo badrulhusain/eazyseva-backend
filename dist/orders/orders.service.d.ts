@@ -1,7 +1,7 @@
 import { SupabaseService } from '../supabase/supabase.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import type { UpdateOrderStatusDto } from './dto/update-order-status.dto';
-import type { Order } from './orders.types';
+import type { AdminOrderSummary, Order } from './orders.types';
 import type { PaginationDto } from '../common/dto/pagination.dto';
 export declare class OrdersService {
     private readonly supabaseService;
@@ -13,7 +13,7 @@ export declare class OrdersService {
     findMyOrders(userId: string): Promise<Order[]>;
     findOne(id: string, userId: string): Promise<Order>;
     findAll(pagination: PaginationDto): Promise<{
-        data: Order[];
+        data: AdminOrderSummary[];
         total: number;
         page: number;
         limit: number;
@@ -23,4 +23,5 @@ export declare class OrdersService {
     invalidateServiceCache(slug?: string): void;
     private getServiceBySlug;
     private static formatRow;
+    private static formatListRow;
 }

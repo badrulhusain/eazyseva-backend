@@ -23,7 +23,7 @@ export declare class AdminOrdersController {
     private readonly ordersService;
     constructor(ordersService: OrdersService);
     findAll(query: PaginationDto): Promise<{
-        data: import("./orders.types").Order[];
+        data: import("./orders.types").AdminOrderSummary[];
         total: number;
         page: number;
         limit: number;

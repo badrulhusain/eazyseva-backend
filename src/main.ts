@@ -1,14 +1,16 @@
 import 'dotenv/config';
 import helmet from 'helmet';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
+const logger = new Logger('Bootstrap');
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    // Keep NestJS logger active; RequestLoggerMiddleware adds HTTP-level logs.
     logger: ['error', 'warn', 'log'],
   });
 
@@ -18,24 +20,31 @@ async function bootstrap() {
   // ── CORS ────────────────────────────────────────────────────────────────────
   const allowedOrigins = (process.env.CLIENT_URLS ?? process.env.CLIENT_URL ?? 'http://localhost:5173')
     .split(',')
-    .map((origin) => origin.trim())
+    .map((o) => o.trim())
     .filter(Boolean);
 
   app.enableCors({
-    origin: (origin, callback) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      // Allow same-origin requests (origin is undefined for server-to-server or curl)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
         return;
       }
-
-      callback(new Error());
+      // Log the rejected origin so we can detect misconfigured frontends and
+      // legitimate CORS policy violations without exposing the reason to the client.
+      logger.warn(`CORS rejected origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
   });
 
-  // ── Request body limit (protects against large JSON payloads) ───────────────
+  // ── Request body limit ───────────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   app.use(require('express').json({ limit: '1mb' }));
 
   // ── Global prefix ───────────────────────────────────────────────────────────
@@ -44,9 +53,9 @@ async function bootstrap() {
   // ── Validation ──────────────────────────────────────────────────────────────
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,           // Strip unknown properties
-      forbidNonWhitelisted: true, // Reject unknown properties with 400
-      transform: true,           // Auto-cast @Param/@Query primitives
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
       transformOptions: { enableImplicitConversion: true },
     }),
   );
@@ -54,7 +63,7 @@ async function bootstrap() {
   // ── Exception filter ────────────────────────────────────────────────────────
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // ── Swagger (disabled in production to avoid exposing internals) ────────────
+  // ── Swagger (disabled in production) ────────────────────────────────────────
   if (process.env.NODE_ENV !== 'production') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('EazySeva API')
@@ -69,8 +78,8 @@ async function bootstrap() {
   // ── Start ───────────────────────────────────────────────────────────────────
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
+  logger.log(`Server listening on port ${port} [${process.env.NODE_ENV ?? 'development'}]`);
 
-  // Graceful shutdown
   app.enableShutdownHooks();
 }
 

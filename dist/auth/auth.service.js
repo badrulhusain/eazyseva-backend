@@ -34,7 +34,7 @@ let AuthService = AuthService_1 = class AuthService {
         });
         if (error) {
             const msg = error.message.toLowerCase();
-            if (msg.includes('already') || msg.includes('email') && msg.includes('registered')) {
+            if (msg.includes('already') || (msg.includes('email') && msg.includes('registered'))) {
                 throw new common_1.ConflictException({ code: 'EMAIL_TAKEN', message: 'Email is already registered' });
             }
             this.logger.error(`Registration failed for ${dto.email}: ${error.message}`);

@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Post,
   Query,
+  Req,
   UploadedFile,
   UseFilters,
   UseInterceptors,
@@ -14,17 +15,18 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import type { Request } from 'express';
 import { UploadsService } from './uploads.service';
 import { MulterExceptionFilter } from './filters/multer-exception.filter';
 import { DeleteDocumentDto } from './dto/delete-document.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUser as CurrentUserType } from '../common/types/current-user.type';
 
-// 5 MB hard ceiling enforced by Multer before the buffer reaches service.
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+// File size ceiling read from env so it can be tuned without a code deploy.
+// The same value is re-validated inside UploadsService before touching Cloudinary.
+const MAX_FILE_SIZE_BYTES = parseInt(process.env.MAX_FILE_SIZE_MB ?? '5', 10) * 1024 * 1024;
 
 // Cloudinary public IDs for this app always follow: ezyseva/documents/{userId}/...
-// This prefix is checked on DELETE to prevent a user from deleting another user's file.
 const DOCUMENT_FOLDER = 'ezyseva/documents';
 
 @Controller('uploads')
@@ -39,19 +41,20 @@ export class UploadsController {
    * uploads it to Cloudinary, and returns the metadata the frontend stores
    * temporarily until the user submits the order form.
    *
-   * Why separate from POST /orders:
-   *   - Uploads can fail independently from order creation.
-   *   - File is validated and stored before the user finishes the form —
-   *     faster feedback on bad file types / oversized files.
-   *   - Order creation stays simple: it only receives URLs, not file bytes.
-   *   - Re-uploads are possible without re-submitting the whole order.
+   * Design note (future): consider switching to direct signed Cloudinary
+   * uploads — frontend calls POST /uploads/sign to get a short-lived signed
+   * upload URL, then POSTs the file directly to Cloudinary. The backend
+   * then only stores the returned metadata (public_id, secure_url, etc.)
+   * without ever holding the file bytes in RAM. This would eliminate:
+   *   - memoryStorage RAM pressure on this server
+   *   - The Cloudinary RTT from this server
+   *   - Upload timeout risk (large file + slow CDN)
    */
   @Post('document')
   @HttpCode(HttpStatus.CREATED)
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @UseInterceptors(
     FileInterceptor('file', {
-      // memoryStorage keeps the file in RAM — no local disk I/O.
       storage: memoryStorage(),
       limits: {
         fileSize: MAX_FILE_SIZE_BYTES,
@@ -62,6 +65,7 @@ export class UploadsController {
   async uploadDocument(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: CurrentUserType,
+    @Req() req: Request,
   ) {
     if (!file) {
       throw new BadRequestException({
@@ -70,7 +74,7 @@ export class UploadsController {
       });
     }
 
-    const data = await this.uploadsService.uploadDocument(file, user.id);
+    const data = await this.uploadsService.uploadDocument(file, user.id, req.requestId);
     return { success: true, data };
   }
 
@@ -79,18 +83,9 @@ export class UploadsController {
    *
    * Cleans up a previously uploaded file from Cloudinary.
    *
-   * publicId is passed as a query parameter (not path segment) because
-   * Cloudinary public IDs can contain forward slashes (e.g.
-   * "ezyseva/documents/abc123/xyz"), which would break URL routing if placed
-   * in a path parameter.
-   *
    * Ownership is enforced: the publicId must start with
    * "ezyseva/documents/{current-user-id}/" so users cannot delete each
    * other's files.
-   *
-   * Call this when:
-   *   - The user leaves the form without submitting.
-   *   - The order creation API returns an error after file upload.
    */
   @Delete('document')
   @HttpCode(HttpStatus.OK)
@@ -98,7 +93,6 @@ export class UploadsController {
     @Query() query: DeleteDocumentDto,
     @CurrentUser() user: CurrentUserType,
   ) {
-    // Ownership check: publicId must belong to the requesting user's folder.
     const expectedPrefix = `${DOCUMENT_FOLDER}/${user.id}/`;
     if (!query.publicId.startsWith(expectedPrefix)) {
       throw new ForbiddenException({

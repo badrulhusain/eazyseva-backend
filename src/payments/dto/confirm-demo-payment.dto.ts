@@ -6,8 +6,8 @@ export class ConfirmDemoPaymentDto {
   orderId: string;
 
   @IsString()
-  @Matches(/^DEMO-TXN-\d{4}-\d{5}$/, {
-    message: 'demoTransactionId must match format DEMO-TXN-YYYY-NNNNN',
+  @Matches(/^DEMO-TXN-\d{4}-[A-Z0-9]{7}$/, {
+    message: 'demoTransactionId must match format DEMO-TXN-YYYY-XXXXXXX',
   })
   demoTransactionId: string;
 

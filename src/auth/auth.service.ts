@@ -14,13 +14,29 @@ import type { LoginDto } from './dto/login.dto';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+
   constructor(private readonly supabaseService: SupabaseService) {}
 
-  // In-process cache: avoids 2 Supabase RTTs (auth.getUser + profiles SELECT) on every
-  // authenticated request. TTL of 60s is short enough to pick up bans/role changes quickly.
+  // ── In-process token cache ─────────────────────────────────────────────────
+  //
+  // Trade-off: we cache auth+profile data for up to TOKEN_CACHE_TTL ms so that
+  // repeated authenticated requests within the same TTL window make zero Supabase
+  // network calls. The downside is that a banned or role-changed user can make
+  // requests for up to TOKEN_CACHE_TTL ms after the change.
+  //
+  // TOKEN_CACHE_TTL = 60 s is short enough that the blast radius of a stale cache
+  // entry is acceptable for a prototype. In production, consider 15–30 s and/or
+  // a Redis-backed cache with pub/sub invalidation on role changes.
+  //
+  // MAX cache size prevents unbounded growth on high-traffic deployments. When the
+  // cache is full we evict expired entries first; if none are expired we evict the
+  // oldest (FIFO) to stay bounded.
+
   private readonly tokenCache = new Map<string, { user: CurrentUser; expiresAt: number }>();
-  private readonly TOKEN_CACHE_TTL = 60_000;
+  private readonly TOKEN_CACHE_TTL = 60_000;   // 60 seconds
   private readonly TOKEN_CACHE_MAX = 500;
+
+  // ── Public auth methods ────────────────────────────────────────────────────
 
   async register(dto: RegisterDto) {
     const { data, error } = await this.supabaseService.admin.auth.admin.createUser({
@@ -35,7 +51,7 @@ export class AuthService {
 
     if (error) {
       const msg = error.message.toLowerCase();
-      if (msg.includes('already') || msg.includes('email') && msg.includes('registered')) {
+      if (msg.includes('already') || (msg.includes('email') && msg.includes('registered'))) {
         throw new ConflictException({ code: 'EMAIL_TAKEN', message: 'Email is already registered' });
       }
       this.logger.error(`Registration failed for ${dto.email}: ${error.message}`);
@@ -105,6 +121,22 @@ export class AuthService {
     return { success: true, data: user };
   }
 
+  /**
+   * Resolves a CurrentUser from a bearer token.
+   *
+   * Fast path: cache hit → zero network calls (valid for TOKEN_CACHE_TTL ms).
+   * Slow path: validate token via Supabase Auth (1 RTT), then fetch profile
+   *            from DB (1 RTT), then cache the result.
+   *
+   * Why supabase.auth.getUser() instead of local JWT.verify()?
+   * JwtModule.register({ secret }) reads process.env at module decoration time,
+   * which can be undefined in some NestJS bootstrap sequences before ConfigModule
+   * fully initialises, causing every verify() call to throw and returning 401 for
+   * all authenticated requests. supabase.auth.getUser() is a network call but is
+   * always correct. The cache already eliminates the RTT for 99% of requests
+   * (those within the 60 s window). Local verification can be revisited once we
+   * switch to JwtModule.registerAsync() with ConfigService.
+   */
   async getUserFromAccessToken(token: string): Promise<CurrentUser> {
     const cached = this.tokenCache.get(token);
     if (cached && cached.expiresAt > Date.now()) {
@@ -126,6 +158,8 @@ export class AuthService {
     return user;
   }
 
+  // ── Internal helpers ───────────────────────────────────────────────────────
+
   private cacheToken(token: string, user: CurrentUser): void {
     if (this.tokenCache.size >= this.TOKEN_CACHE_MAX) {
       const now = Date.now();
@@ -136,7 +170,7 @@ export class AuthService {
           evictedExpired = true;
         }
       }
-      // If no expired entries, evict the oldest (first-inserted) entry to stay bounded.
+      // If no expired entries exist, evict the oldest (FIFO) to keep cache bounded.
       if (!evictedExpired) {
         const oldest = this.tokenCache.keys().next().value;
         if (oldest !== undefined) this.tokenCache.delete(oldest);
@@ -145,6 +179,15 @@ export class AuthService {
     this.tokenCache.set(token, { user, expiresAt: Date.now() + this.TOKEN_CACHE_TTL });
   }
 
+  /**
+   * Fetches the canonical user profile from the profiles table.
+   *
+   * All role and identity data comes from the DB, not from the JWT, so an
+   * admin revocation or role downgrade takes effect within TOKEN_CACHE_TTL ms.
+   *
+   * Falls back to user_metadata if the profile row does not yet exist and
+   * auto-creates the missing profile row.
+   */
   async resolveCurrentUser(user: Pick<User, 'id' | 'email' | 'user_metadata'>): Promise<CurrentUser> {
     const { data: profile, error } = await this.supabaseService.admin
       .from('profiles')
@@ -169,6 +212,7 @@ export class AuthService {
       });
     }
 
+    // Profile row not found — upsert a default USER profile and continue.
     const fallbackUser: CurrentUser = {
       id: user.id,
       email: user.email ?? '',

@@ -13,6 +13,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersService = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../supabase/supabase.service");
+const ORDER_FULL_COLS = 'id, order_number, user_id, service_type, customer_name, customer_phone, ' +
+    'customer_dob, customer_address, documents, price_government_fee, ' +
+    'price_service_charge, price_document_handling, price_total, status, ' +
+    'payment_status, payment_method, demo_transaction_id, payment_currency, ' +
+    'paid_at, payment_failure_reason, timeline, created_at, updated_at';
+const ORDER_LIST_COLS = 'id, order_number, service_type, customer_name, customer_phone, status, ' +
+    'payment_status, price_total, created_at, updated_at';
 let OrdersService = OrdersService_1 = class OrdersService {
     supabaseService;
     logger = new common_1.Logger(OrdersService_1.name);
@@ -73,7 +80,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
     async findMyOrders(userId) {
         const { data, error } = await this.supabaseService.admin
             .from('orders')
-            .select('*')
+            .select(ORDER_FULL_COLS)
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
         if (error) {
@@ -84,17 +91,14 @@ let OrdersService = OrdersService_1 = class OrdersService {
     async findOne(id, userId) {
         const { data, error } = await this.supabaseService.admin
             .from('orders')
-            .select('*')
+            .select(ORDER_FULL_COLS)
             .eq('id', id)
+            .eq('user_id', userId)
             .single();
         if (error || !data) {
             throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
         }
-        const row = data;
-        if (row.user_id !== userId) {
-            throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
-        }
-        return OrdersService_1.formatRow(row);
+        return OrdersService_1.formatRow(data);
     }
     async findAll(pagination) {
         const { page, limit, status } = pagination;
@@ -102,7 +106,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
         const to = from + limit - 1;
         let query = this.supabaseService.admin
             .from('orders')
-            .select('*', { count: 'exact' })
+            .select(ORDER_LIST_COLS, { count: 'planned' })
             .order('created_at', { ascending: false })
             .range(from, to);
         if (status) {
@@ -113,7 +117,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
             throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
         }
         return {
-            data: (data ?? []).map(OrdersService_1.formatRow),
+            data: (data ?? []).map(OrdersService_1.formatListRow),
             total: count ?? 0,
             page,
             limit,
@@ -122,7 +126,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
     async findOneAdmin(id) {
         const { data, error } = await this.supabaseService.admin
             .from('orders')
-            .select('*')
+            .select(ORDER_FULL_COLS)
             .eq('id', id)
             .single();
         if (error || !data) {
@@ -135,7 +139,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
             .from('orders')
             .update({ status: dto.status })
             .eq('id', id)
-            .select()
+            .select(ORDER_FULL_COLS)
             .single();
         if (error || !data) {
             throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
@@ -196,6 +200,20 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 failureReason: row.payment_failure_reason ?? null,
             },
             timeline: row.timeline ?? [],
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+        };
+    }
+    static formatListRow(row) {
+        return {
+            id: row.id,
+            orderNumber: row.order_number,
+            serviceType: row.service_type,
+            customerName: row.customer_name,
+            customerPhone: row.customer_phone,
+            status: row.status,
+            paymentStatus: row.payment_status,
+            priceTotal: Number(row.price_total),
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         };

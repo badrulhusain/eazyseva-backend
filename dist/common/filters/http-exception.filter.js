@@ -9,12 +9,14 @@ var AllExceptionsFilter_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AllExceptionsFilter = void 0;
 const common_1 = require("@nestjs/common");
+const IS_PROD = process.env.NODE_ENV === 'production';
 let AllExceptionsFilter = AllExceptionsFilter_1 = class AllExceptionsFilter {
     logger = new common_1.Logger(AllExceptionsFilter_1.name);
     catch(exception, host) {
         const ctx = host.switchToHttp();
         const response = ctx.getResponse();
         const request = ctx.getRequest();
+        const rid = request.requestId ?? '-';
         let status = common_1.HttpStatus.INTERNAL_SERVER_ERROR;
         let code = 'INTERNAL_ERROR';
         let message = 'An unexpected error occurred';
@@ -31,14 +33,14 @@ let AllExceptionsFilter = AllExceptionsFilter_1 = class AllExceptionsFilter {
                 message = exception.message;
             }
             if (status >= 500) {
-                this.logger.error(`[${status}] ${code}: ${message} — ${request.method} ${request.url}`, exception.stack);
+                this.logger.error(`[${status}] ${code}: ${message} — ${request.method} ${request.url} rid=${rid}`, IS_PROD ? undefined : exception.stack);
             }
         }
         else if (exception instanceof Error) {
-            this.logger.error(`Unhandled error: ${exception.message} — ${request.method} ${request.url}`, exception.stack);
+            this.logger.error(`Unhandled error: ${exception.message} — ${request.method} ${request.url} rid=${rid}`, IS_PROD ? undefined : exception.stack);
         }
         else {
-            this.logger.error(`Unknown exception — ${request.method} ${request.url}`, String(exception));
+            this.logger.error(`Unknown exception — ${request.method} ${request.url} rid=${rid}`, String(exception));
         }
         response.status(status).json({
             success: false,
@@ -46,6 +48,7 @@ let AllExceptionsFilter = AllExceptionsFilter_1 = class AllExceptionsFilter {
             message,
             path: request.url,
             timestamp: new Date().toISOString(),
+            requestId: rid,
         });
     }
     statusToCode(status) {

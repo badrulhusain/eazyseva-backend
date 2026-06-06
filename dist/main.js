@@ -5,11 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const helmet_1 = __importDefault(require("helmet"));
-const core_1 = require("@nestjs/core");
 const common_1 = require("@nestjs/common");
+const core_1 = require("@nestjs/core");
+const common_2 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const app_module_1 = require("./app.module");
 const http_exception_filter_1 = require("./common/filters/http-exception.filter");
+const logger = new common_1.Logger('Bootstrap');
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, {
         logger: ['error', 'warn', 'log'],
@@ -17,7 +19,7 @@ async function bootstrap() {
     app.use((0, helmet_1.default)());
     const allowedOrigins = (process.env.CLIENT_URLS ?? process.env.CLIENT_URL ?? 'http://localhost:5173')
         .split(',')
-        .map((origin) => origin.trim())
+        .map((o) => o.trim())
         .filter(Boolean);
     app.enableCors({
         origin: (origin, callback) => {
@@ -25,15 +27,16 @@ async function bootstrap() {
                 callback(null, true);
                 return;
             }
-            callback(new Error());
+            logger.warn(`CORS rejected origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
         },
         credentials: true,
         methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
     });
     app.use(require('express').json({ limit: '1mb' }));
     app.setGlobalPrefix('api/v1');
-    app.useGlobalPipes(new common_1.ValidationPipe({
+    app.useGlobalPipes(new common_2.ValidationPipe({
         whitelist: true,
         forbidNonWhitelisted: true,
         transform: true,
@@ -52,6 +55,7 @@ async function bootstrap() {
     }
     const port = process.env.PORT ?? 3000;
     await app.listen(port);
+    logger.log(`Server listening on port ${port} [${process.env.NODE_ENV ?? 'development'}]`);
     app.enableShutdownHooks();
 }
 bootstrap();
