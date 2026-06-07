@@ -15,9 +15,10 @@ import { Throttle } from '@nestjs/throttler';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { RejectOrderDto } from './dto/reject-order.dto';
+import { RequestCorrectionDto } from './dto/request-correction.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { RolesGuard } from '../auth/guards/roles.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import type { CurrentUser as CurrentUserType } from '../common/types/current-user.type';
 
@@ -56,8 +57,7 @@ export class OrdersController {
 
 // ── Admin routes (JWT + ADMIN role) ──────────────────────────────────────────
 
-@Roles('ADMIN')
-@UseGuards(RolesGuard)
+@UseGuards(AdminGuard)
 @Controller('admin/orders')
 export class AdminOrdersController {
   constructor(private readonly ordersService: OrdersService) {}
@@ -88,6 +88,44 @@ export class AdminOrdersController {
     @CurrentUser() user: CurrentUserType,
   ) {
     const data = await this.ordersService.updateStatus(id, dto, user.id);
+    return { success: true, data };
+  }
+
+  @Patch(':id/accept')
+  async accept(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    const data = await this.ordersService.acceptOrder(id, user.id);
+    return { success: true, data };
+  }
+
+  @Patch(':id/reject')
+  async reject(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectOrderDto,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    const data = await this.ordersService.rejectOrder(id, dto, user.id);
+    return { success: true, data };
+  }
+
+  @Patch(':id/request-correction')
+  async requestCorrection(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RequestCorrectionDto,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    const data = await this.ordersService.requestCorrection(id, dto, user.id);
+    return { success: true, data };
+  }
+
+  @Patch(':id/complete')
+  async complete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    const data = await this.ordersService.completeOrder(id, user.id);
     return { success: true, data };
   }
 }

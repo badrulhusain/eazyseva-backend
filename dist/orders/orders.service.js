@@ -13,6 +13,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersService = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../supabase/supabase.service");
+const audit_logs_service_1 = require("../audit-logs/audit-logs.service");
+const documents_service_1 = require("../documents/documents.service");
 const ORDER_FULL_COLS = 'id, order_number, user_id, service_type, customer_name, customer_phone, ' +
     'customer_dob, customer_address, documents, price_government_fee, ' +
     'price_service_charge, price_document_handling, price_total, status, ' +
@@ -23,26 +25,52 @@ const ORDER_FULL_COLS = 'id, order_number, user_id, service_type, customer_name,
 const ORDER_LIST_COLS = 'id, order_number, service_type, customer_name, customer_phone, status, ' +
     'payment_status, price_total, created_at, updated_at';
 const STATUS_TRANSITIONS = {
-    PENDING: ['ACCEPTED', 'REJECTED'],
-    ACCEPTED: ['PROCESSING'],
+    PENDING: ['UNDER_REVIEW', 'ACCEPTED', 'REJECTED', 'CANCELLED'],
+    UNDER_REVIEW: ['ACCEPTED', 'REJECTED', 'CORRECTION_REQUESTED', 'CANCELLED'],
+    CORRECTION_REQUESTED: ['UNDER_REVIEW', 'ACCEPTED', 'REJECTED', 'CANCELLED'],
+    ACCEPTED: ['PROCESSING', 'CANCELLED'],
     PROCESSING: ['COMPLETED'],
     COMPLETED: [],
     REJECTED: [],
+    CANCELLED: [],
+};
+const STATUS_AUDIT_ACTIONS = {
+    ACCEPTED: 'ADMIN_ACCEPTED_ORDER',
+    REJECTED: 'ADMIN_REJECTED_ORDER',
+    CORRECTION_REQUESTED: 'ADMIN_REQUESTED_CORRECTION',
+    COMPLETED: 'ADMIN_COMPLETED_ORDER',
 };
 function buildTimelineEvent(status, reason) {
     switch (status) {
-        case 'ACCEPTED': return 'Order accepted by admin';
-        case 'PROCESSING': return 'Order is being processed';
-        case 'COMPLETED': return 'Order completed';
-        case 'REJECTED': return reason ? `Order rejected: ${reason}` : 'Order rejected';
-        default: return `Status changed to ${status}`;
+        case 'UNDER_REVIEW':
+            return 'Order moved under review';
+        case 'ACCEPTED':
+            return 'Order accepted by admin';
+        case 'CORRECTION_REQUESTED':
+            return reason
+                ? `Correction requested: ${reason}`
+                : 'Correction requested';
+        case 'PROCESSING':
+            return 'Order is being processed';
+        case 'COMPLETED':
+            return 'Order completed';
+        case 'REJECTED':
+            return reason ? `Order rejected: ${reason}` : 'Order rejected';
+        case 'CANCELLED':
+            return reason ? `Order cancelled: ${reason}` : 'Order cancelled';
+        default:
+            return `Status changed to ${status}`;
     }
 }
 let OrdersService = OrdersService_1 = class OrdersService {
     supabaseService;
+    auditLogsService;
+    orderDocumentsService;
     logger = new common_1.Logger(OrdersService_1.name);
-    constructor(supabaseService) {
+    constructor(supabaseService, auditLogsService, orderDocumentsService) {
         this.supabaseService = supabaseService;
+        this.auditLogsService = auditLogsService;
+        this.orderDocumentsService = orderDocumentsService;
     }
     servicesCache = new Map();
     SERVICES_CACHE_TTL = 30_000;
@@ -93,6 +121,11 @@ let OrdersService = OrdersService_1 = class OrdersService {
         }
         const order = OrdersService_1.formatRow(data);
         this.logger.log(`Order created: ${order.orderNumber} user=${userId} total=${total}`);
+        this.orderDocumentsService
+            .trackDocuments(order.id, userId, dto.documents ?? [])
+            .catch((err) => {
+            this.logger.error(`Failed to track documents for order=${order.id}: ${err instanceof Error ? err.message : err}`);
+        });
         return order;
     }
     async findMyOrders(userId) {
@@ -102,7 +135,10 @@ let OrdersService = OrdersService_1 = class OrdersService {
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
         if (error) {
-            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+            throw new common_1.InternalServerErrorException({
+                code: 'DB_ERROR',
+                message: error.message,
+            });
         }
         return (data ?? []).map(OrdersService_1.formatRow);
     }
@@ -115,18 +151,27 @@ let OrdersService = OrdersService_1 = class OrdersService {
             .single();
         if (error) {
             if (error.code === 'PGRST116') {
-                throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+                throw new common_1.NotFoundException({
+                    code: 'ORDER_NOT_FOUND',
+                    message: 'Order not found',
+                });
             }
             this.logger.error(`findOne db error id=${id} uid=${userId}: [${error.code}] ${error.message}`);
-            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+            throw new common_1.InternalServerErrorException({
+                code: 'DB_ERROR',
+                message: error.message,
+            });
         }
         if (!data) {
-            throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+            throw new common_1.NotFoundException({
+                code: 'ORDER_NOT_FOUND',
+                message: 'Order not found',
+            });
         }
         return OrdersService_1.formatRow(data);
     }
     async findAll(pagination) {
-        const { page, limit, status } = pagination;
+        const { page, limit, status, search, dateFrom, dateTo } = pagination;
         const from = (page - 1) * limit;
         const to = from + limit - 1;
         let query = this.supabaseService.admin
@@ -137,9 +182,22 @@ let OrdersService = OrdersService_1 = class OrdersService {
         if (status) {
             query = query.eq('status', status);
         }
+        if (search?.trim()) {
+            const term = `%${search.trim()}%`;
+            query = query.or(`order_number.ilike.${term},customer_name.ilike.${term},customer_phone.ilike.${term}`);
+        }
+        if (dateFrom) {
+            query = query.gte('created_at', dateFrom);
+        }
+        if (dateTo) {
+            query = query.lte('created_at', dateTo);
+        }
         const { data, error, count } = await query;
         if (error) {
-            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+            throw new common_1.InternalServerErrorException({
+                code: 'DB_ERROR',
+                message: error.message,
+            });
         }
         return {
             data: (data ?? []).map(OrdersService_1.formatListRow),
@@ -156,42 +214,76 @@ let OrdersService = OrdersService_1 = class OrdersService {
             .single();
         if (error) {
             if (error.code === 'PGRST116') {
-                throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+                throw new common_1.NotFoundException({
+                    code: 'ORDER_NOT_FOUND',
+                    message: 'Order not found',
+                });
             }
             this.logger.error(`findOneAdmin db error id=${id}: [${error.code}] ${error.message}`);
-            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+            throw new common_1.InternalServerErrorException({
+                code: 'DB_ERROR',
+                message: error.message,
+            });
         }
         if (!data) {
-            throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+            throw new common_1.NotFoundException({
+                code: 'ORDER_NOT_FOUND',
+                message: 'Order not found',
+            });
         }
         return OrdersService_1.formatRow(data);
     }
     async updateStatus(id, dto, adminId) {
-        const current = await this.findOneAdmin(id);
-        this.assertValidTransition(current.status, dto.status);
-        if (dto.status === 'REJECTED' && !dto.reason?.trim()) {
+        if ((dto.status === 'REJECTED' || dto.status === 'CORRECTION_REQUESTED') &&
+            !dto.reason?.trim()) {
             throw new common_1.BadRequestException({
                 code: 'REASON_REQUIRED',
-                message: 'A rejection reason is required when rejecting an order',
+                message: 'A reason is required when rejecting an order or requesting a correction',
             });
         }
+        return this.applyStatusChange(id, dto.status, adminId, {
+            reason: dto.reason,
+            adminNote: dto.adminNote,
+        });
+    }
+    async acceptOrder(id, adminId) {
+        return this.applyStatusChange(id, 'ACCEPTED', adminId);
+    }
+    async rejectOrder(id, dto, adminId) {
+        return this.applyStatusChange(id, 'REJECTED', adminId, {
+            reason: dto.note,
+        });
+    }
+    async requestCorrection(id, dto, adminId) {
+        return this.applyStatusChange(id, 'CORRECTION_REQUESTED', adminId, {
+            reason: dto.note,
+        });
+    }
+    async completeOrder(id, adminId) {
+        return this.applyStatusChange(id, 'COMPLETED', adminId);
+    }
+    async applyStatusChange(id, nextStatus, adminId, opts = {}) {
+        const current = await this.findOneAdmin(id);
+        this.assertValidTransition(current.status, nextStatus);
         const now = new Date().toISOString();
         const timelineEntry = {
-            event: buildTimelineEvent(dto.status, dto.reason),
+            event: buildTimelineEvent(nextStatus, opts.reason),
             timestamp: now,
         };
-        const newTimeline = [...(current.timeline ?? []), timelineEntry];
         const updatePayload = {
-            status: dto.status,
-            timeline: newTimeline,
+            status: nextStatus,
+            timeline: [...(current.timeline ?? []), timelineEntry],
             reviewed_by: adminId,
             reviewed_at: now,
         };
-        if (dto.status === 'REJECTED') {
-            updatePayload.rejection_reason = dto.reason.trim();
+        if (nextStatus === 'REJECTED') {
+            updatePayload.rejection_reason = opts.reason.trim();
         }
-        if (dto.adminNote?.trim()) {
-            updatePayload.admin_note = dto.adminNote.trim();
+        if (nextStatus === 'CORRECTION_REQUESTED') {
+            updatePayload.admin_note = opts.reason.trim();
+        }
+        if (opts.adminNote?.trim()) {
+            updatePayload.admin_note = opts.adminNote.trim();
         }
         const { data, error } = await this.supabaseService.admin
             .from('orders')
@@ -201,16 +293,40 @@ let OrdersService = OrdersService_1 = class OrdersService {
             .single();
         if (error) {
             if (error.code === 'PGRST116') {
-                throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+                throw new common_1.NotFoundException({
+                    code: 'ORDER_NOT_FOUND',
+                    message: 'Order not found',
+                });
             }
-            this.logger.error(`updateStatus db error id=${id}: [${error.code}] ${error.message}`);
-            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+            this.logger.error(`applyStatusChange db error id=${id}: [${error.code}] ${error.message}`);
+            throw new common_1.InternalServerErrorException({
+                code: 'DB_ERROR',
+                message: error.message,
+            });
         }
         if (!data) {
-            throw new common_1.NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+            throw new common_1.NotFoundException({
+                code: 'ORDER_NOT_FOUND',
+                message: 'Order not found',
+            });
         }
         const updated = OrdersService_1.formatRow(data);
-        this.logger.log(`Order ${updated.orderNumber} status: ${current.status} → ${dto.status} by admin=${adminId}`);
+        this.logger.log(`Order ${updated.orderNumber} status: ${current.status} → ${nextStatus} by admin=${adminId}`);
+        const auditAction = STATUS_AUDIT_ACTIONS[nextStatus];
+        if (auditAction) {
+            void this.auditLogsService.record(adminId, auditAction, 'order', updated.id, {
+                orderNumber: updated.orderNumber,
+                previousStatus: current.status,
+                ...(opts.reason ? { reason: opts.reason.trim() } : {}),
+            });
+        }
+        if (nextStatus === 'COMPLETED') {
+            this.orderDocumentsService
+                .scheduleForDeletion(updated.id, adminId)
+                .catch((err) => {
+                this.logger.error(`Failed to schedule documents for deletion order=${updated.id}: ${err instanceof Error ? err.message : err}`);
+            });
+        }
         return updated;
     }
     invalidateServiceCache(slug) {
@@ -244,9 +360,15 @@ let OrdersService = OrdersService_1 = class OrdersService {
             .eq('is_active', true)
             .maybeSingle();
         if (error) {
-            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+            throw new common_1.InternalServerErrorException({
+                code: 'DB_ERROR',
+                message: error.message,
+            });
         }
-        this.servicesCache.set(slug, { data: data ?? null, expiresAt: Date.now() + this.SERVICES_CACHE_TTL });
+        this.servicesCache.set(slug, {
+            data: data ?? null,
+            expiresAt: Date.now() + this.SERVICES_CACHE_TTL,
+        });
         return data ?? null;
     }
     static formatRow(row) {
@@ -305,6 +427,8 @@ let OrdersService = OrdersService_1 = class OrdersService {
 exports.OrdersService = OrdersService;
 exports.OrdersService = OrdersService = OrdersService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [supabase_service_1.SupabaseService])
+    __metadata("design:paramtypes", [supabase_service_1.SupabaseService,
+        audit_logs_service_1.AuditLogsService,
+        documents_service_1.OrderDocumentsService])
 ], OrdersService);
 //# sourceMappingURL=orders.service.js.map

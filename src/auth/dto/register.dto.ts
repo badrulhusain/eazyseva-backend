@@ -19,7 +19,9 @@ export class RegisterDto {
 
   @IsString()
   @IsNotEmpty({ message: 'Phone number is required' })
-  @Matches(/^[+]?[0-9]{10,15}$/, { message: 'Phone must be a valid 10–15 digit number' })
+  @Matches(/^[+]?[0-9]{10,15}$/, {
+    message: 'Phone must be a valid 10–15 digit number',
+  })
   phone: string;
 
   @IsString()

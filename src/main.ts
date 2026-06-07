@@ -18,7 +18,11 @@ async function bootstrap() {
   app.use(helmet());
 
   // ── CORS ────────────────────────────────────────────────────────────────────
-  const allowedOrigins = (process.env.CLIENT_URLS ?? process.env.CLIENT_URL ?? 'http://localhost:5173')
+  const allowedOrigins = (
+    process.env.CLIENT_URLS ??
+    process.env.CLIENT_URL ??
+    'http://localhost:5173'
+  )
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
@@ -78,7 +82,9 @@ async function bootstrap() {
   // ── Start ───────────────────────────────────────────────────────────────────
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  logger.log(`Server listening on port ${port} [${process.env.NODE_ENV ?? 'development'}]`);
+  logger.log(
+    `Server listening on port ${port} [${process.env.NODE_ENV ?? 'development'}]`,
+  );
 
   app.enableShutdownHooks();
 }

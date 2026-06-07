@@ -18,9 +18,10 @@ const throttler_1 = require("@nestjs/throttler");
 const orders_service_1 = require("./orders.service");
 const create_order_dto_1 = require("./dto/create-order.dto");
 const update_order_status_dto_1 = require("./dto/update-order-status.dto");
+const reject_order_dto_1 = require("./dto/reject-order.dto");
+const request_correction_dto_1 = require("./dto/request-correction.dto");
 const current_user_decorator_1 = require("../auth/decorators/current-user.decorator");
-const roles_decorator_1 = require("../auth/decorators/roles.decorator");
-const roles_guard_1 = require("../auth/guards/roles.guard");
+const admin_guard_1 = require("../auth/guards/admin.guard");
 const pagination_dto_1 = require("../common/dto/pagination.dto");
 let OrdersController = class OrdersController {
     ordersService;
@@ -87,6 +88,22 @@ let AdminOrdersController = class AdminOrdersController {
         const data = await this.ordersService.updateStatus(id, dto, user.id);
         return { success: true, data };
     }
+    async accept(id, user) {
+        const data = await this.ordersService.acceptOrder(id, user.id);
+        return { success: true, data };
+    }
+    async reject(id, dto, user) {
+        const data = await this.ordersService.rejectOrder(id, dto, user.id);
+        return { success: true, data };
+    }
+    async requestCorrection(id, dto, user) {
+        const data = await this.ordersService.requestCorrection(id, dto, user.id);
+        return { success: true, data };
+    }
+    async complete(id, user) {
+        const data = await this.ordersService.completeOrder(id, user.id);
+        return { success: true, data };
+    }
 };
 exports.AdminOrdersController = AdminOrdersController;
 __decorate([
@@ -112,9 +129,42 @@ __decorate([
     __metadata("design:paramtypes", [String, update_order_status_dto_1.UpdateOrderStatusDto, Object]),
     __metadata("design:returntype", Promise)
 ], AdminOrdersController.prototype, "updateStatus", null);
+__decorate([
+    (0, common_1.Patch)(':id/accept'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AdminOrdersController.prototype, "accept", null);
+__decorate([
+    (0, common_1.Patch)(':id/reject'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, reject_order_dto_1.RejectOrderDto, Object]),
+    __metadata("design:returntype", Promise)
+], AdminOrdersController.prototype, "reject", null);
+__decorate([
+    (0, common_1.Patch)(':id/request-correction'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, request_correction_dto_1.RequestCorrectionDto, Object]),
+    __metadata("design:returntype", Promise)
+], AdminOrdersController.prototype, "requestCorrection", null);
+__decorate([
+    (0, common_1.Patch)(':id/complete'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AdminOrdersController.prototype, "complete", null);
 exports.AdminOrdersController = AdminOrdersController = __decorate([
-    (0, roles_decorator_1.Roles)('ADMIN'),
-    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, common_1.UseGuards)(admin_guard_1.AdminGuard),
     (0, common_1.Controller)('admin/orders'),
     __metadata("design:paramtypes", [orders_service_1.OrdersService])
 ], AdminOrdersController);

@@ -15,8 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminServicesController = exports.ServicesController = void 0;
 const common_1 = require("@nestjs/common");
 const public_decorator_1 = require("../auth/decorators/public.decorator");
-const roles_decorator_1 = require("../auth/decorators/roles.decorator");
-const roles_guard_1 = require("../auth/guards/roles.guard");
+const admin_guard_1 = require("../auth/guards/admin.guard");
 const services_service_1 = require("./services.service");
 const create_service_dto_1 = require("./dto/create-service.dto");
 const update_service_dto_1 = require("./dto/update-service.dto");
@@ -106,8 +105,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AdminServicesController.prototype, "remove", null);
 exports.AdminServicesController = AdminServicesController = __decorate([
-    (0, roles_decorator_1.Roles)('ADMIN'),
-    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, common_1.UseGuards)(admin_guard_1.AdminGuard),
     (0, common_1.Controller)('admin/services'),
     __metadata("design:paramtypes", [services_service_1.ServicesService])
 ], AdminServicesController);

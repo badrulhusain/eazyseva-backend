@@ -1,6 +1,8 @@
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { RejectOrderDto } from './dto/reject-order.dto';
+import { RequestCorrectionDto } from './dto/request-correction.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import type { CurrentUser as CurrentUserType } from '../common/types/current-user.type';
 export declare class OrdersController {
@@ -34,6 +36,22 @@ export declare class AdminOrdersController {
         data: import("./orders.types").Order;
     }>;
     updateStatus(id: string, dto: UpdateOrderStatusDto, user: CurrentUserType): Promise<{
+        success: boolean;
+        data: import("./orders.types").Order;
+    }>;
+    accept(id: string, user: CurrentUserType): Promise<{
+        success: boolean;
+        data: import("./orders.types").Order;
+    }>;
+    reject(id: string, dto: RejectOrderDto, user: CurrentUserType): Promise<{
+        success: boolean;
+        data: import("./orders.types").Order;
+    }>;
+    requestCorrection(id: string, dto: RequestCorrectionDto, user: CurrentUserType): Promise<{
+        success: boolean;
+        data: import("./orders.types").Order;
+    }>;
+    complete(id: string, user: CurrentUserType): Promise<{
         success: boolean;
         data: import("./orders.types").Order;
     }>;

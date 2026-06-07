@@ -10,8 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Public } from '../auth/decorators/public.decorator';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { RolesGuard } from '../auth/guards/roles.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -35,8 +34,7 @@ export class ServicesController {
   }
 }
 
-@Roles('ADMIN')
-@UseGuards(RolesGuard)
+@UseGuards(AdminGuard)
 @Controller('admin/services')
 export class AdminServicesController {
   constructor(private readonly servicesService: ServicesService) {}

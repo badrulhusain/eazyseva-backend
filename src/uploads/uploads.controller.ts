@@ -25,7 +25,8 @@ import type { CurrentUser as CurrentUserType } from '../common/types/current-use
 
 // File size ceiling read from env so it can be tuned without a code deploy.
 // The same value is re-validated inside UploadsService before touching Cloudinary.
-const MAX_FILE_SIZE_BYTES = parseInt(process.env.MAX_FILE_SIZE_MB ?? '5', 10) * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES =
+  parseInt(process.env.MAX_FILE_SIZE_MB ?? '5', 10) * 1024 * 1024;
 
 // Cloudinary public IDs for this app always follow: ezyseva/{folder}/{userId}/...
 const DOCUMENT_FOLDER = 'ezyseva/documents';
@@ -74,11 +75,16 @@ export class UploadsController {
     if (!file) {
       throw new BadRequestException({
         code: 'NO_FILE',
-        message: 'No file was uploaded. Attach the file using field name "file".',
+        message:
+          'No file was uploaded. Attach the file using field name "file".',
       });
     }
 
-    const data = await this.uploadsService.uploadDocument(file, user.id, req.requestId);
+    const data = await this.uploadsService.uploadDocument(
+      file,
+      user.id,
+      req.requestId,
+    );
     return { success: true, data };
   }
 
@@ -114,7 +120,11 @@ export class UploadsController {
     @CurrentUser() user: CurrentUserType,
     @Req() req: Request,
   ) {
-    const data = await this.uploadsService.uploadOrderDocuments(files, user.id, req.requestId);
+    const data = await this.uploadsService.uploadOrderDocuments(
+      files,
+      user.id,
+      req.requestId,
+    );
     return { success: true, data };
   }
 
@@ -146,7 +156,10 @@ export class UploadsController {
       });
     }
 
-    await this.uploadsService.deleteDocument(query.publicId, query.resourceType);
+    await this.uploadsService.deleteDocument(
+      query.publicId,
+      query.resourceType,
+    );
     return { success: true, message: 'File deleted successfully' };
   }
 }

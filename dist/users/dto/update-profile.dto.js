@@ -25,7 +25,9 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^[+]?[0-9]{10,15}$/, { message: 'phone must be a valid phone number' }),
+    (0, class_validator_1.Matches)(/^[+]?[0-9]{10,15}$/, {
+        message: 'phone must be a valid phone number',
+    }),
     __metadata("design:type", String)
 ], UpdateProfileDto.prototype, "phone", void 0);
 //# sourceMappingURL=update-profile.dto.js.map

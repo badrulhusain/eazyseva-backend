@@ -1,6 +1,26 @@
-import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import type { OrderStatus } from '../../orders/orders.types';
+
+const ORDER_STATUS_VALUES: OrderStatus[] = [
+  'PENDING',
+  'UNDER_REVIEW',
+  'ACCEPTED',
+  'CORRECTION_REQUESTED',
+  'PROCESSING',
+  'COMPLETED',
+  'REJECTED',
+  'CANCELLED',
+];
 
 export class PaginationDto {
   @IsOptional()
@@ -17,8 +37,22 @@ export class PaginationDto {
   limit: number = 20;
 
   @IsOptional()
-  @IsEnum(['PENDING', 'ACCEPTED', 'PROCESSING', 'COMPLETED', 'REJECTED'], {
-    message: 'status must be one of: PENDING, ACCEPTED, PROCESSING, COMPLETED, REJECTED',
+  @IsEnum(ORDER_STATUS_VALUES, {
+    message: `status must be one of: ${ORDER_STATUS_VALUES.join(', ')}`,
   })
   status?: OrderStatus;
+
+  // Free-text search across order number / customer name / customer phone.
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  search?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: 'dateFrom must be a valid ISO 8601 date' })
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: 'dateTo must be a valid ISO 8601 date' })
+  dateTo?: string;
 }

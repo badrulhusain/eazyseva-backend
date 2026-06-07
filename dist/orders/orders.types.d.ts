@@ -1,4 +1,4 @@
-export type OrderStatus = 'PENDING' | 'ACCEPTED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
+export type OrderStatus = 'PENDING' | 'UNDER_REVIEW' | 'ACCEPTED' | 'CORRECTION_REQUESTED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
 export type PaymentStatus = 'NOT_PAID' | 'PAYMENT_PENDING' | 'PAID' | 'FAILED';
 export type DemoPaymentMethod = 'DEMO_UPI' | 'DEMO_CARD' | 'DEMO_CASH' | 'PAY_LATER';
 export interface OrderDocument {

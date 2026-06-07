@@ -39,14 +39,17 @@ export class HealthController {
     try {
       // next_order_number is an existing cheap sequence function.
       // Any lightweight query or rpc works here; we discard the result.
-      const { error } = await this.supabaseService.admin.rpc('next_order_number');
+      const { error } =
+        await this.supabaseService.admin.rpc('next_order_number');
 
       // Roll back the sequence increment immediately — we only care about connectivity.
       // In production replace with a dedicated health-check RPC or a cheap SELECT 1.
       const latencyMs = Date.now() - start;
 
       if (error) {
-        this.logger.warn(`DB health check failed: ${error.message} (${latencyMs}ms)`);
+        this.logger.warn(
+          `DB health check failed: ${error.message} (${latencyMs}ms)`,
+        );
         return {
           success: false,
           status: 'degraded',

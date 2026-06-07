@@ -19,7 +19,9 @@ class TestableUploadsService extends UploadsService {
   }
 }
 
-function makeFile(overrides: Partial<Express.Multer.File> = {}): Express.Multer.File {
+function makeFile(
+  overrides: Partial<Express.Multer.File> = {},
+): Express.Multer.File {
   return {
     fieldname: 'file',
     originalname: 'test.pdf',
@@ -44,7 +46,9 @@ describe('UploadsService.validateFile', () => {
 
   it('accepts all allowed MIME types', () => {
     for (const mime of ALLOWED_MIME_TYPES) {
-      expect(() => service.testValidate(makeFile({ mimetype: mime }))).not.toThrow();
+      expect(() =>
+        service.testValidate(makeFile({ mimetype: mime })),
+      ).not.toThrow();
     }
   });
 

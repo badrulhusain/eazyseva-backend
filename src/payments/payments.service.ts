@@ -46,14 +46,21 @@ export class PaymentsService {
       if (sessionAge < PAYMENT_PENDING_TIMEOUT_MS) {
         throw new BadRequestException({
           code: 'PAYMENT_IN_PROGRESS',
-          message: 'A payment is already in progress. Confirm or retry the existing session.',
+          message:
+            'A payment is already in progress. Confirm or retry the existing session.',
         });
       }
       // Session is stale — auto-reset so the user can start fresh without calling /reset
-      this.logger.warn(`Auto-resetting stale PAYMENT_PENDING session for order ${dto.orderId}`);
+      this.logger.warn(
+        `Auto-resetting stale PAYMENT_PENDING session for order ${dto.orderId}`,
+      );
       await this.supabaseService.admin
         .from('orders')
-        .update({ payment_status: PaymentStatus.NOT_PAID, demo_transaction_id: null, payment_method: null })
+        .update({
+          payment_status: PaymentStatus.NOT_PAID,
+          demo_transaction_id: null,
+          payment_method: null,
+        })
         .eq('id', dto.orderId);
     }
 
@@ -61,7 +68,10 @@ export class PaymentsService {
     const amount = Number(order.price_total);
     const currency = 'INR';
 
-    const timeline = this.appendTimeline(order.timeline, `Demo payment started via ${dto.method}`);
+    const timeline = this.appendTimeline(
+      order.timeline,
+      `Demo payment started via ${dto.method}`,
+    );
 
     const { error } = await this.supabaseService.admin
       .from('orders')
@@ -75,10 +85,15 @@ export class PaymentsService {
       .eq('id', dto.orderId);
 
     if (error) {
-      throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+      throw new InternalServerErrorException({
+        code: 'DB_ERROR',
+        message: error.message,
+      });
     }
 
-    this.logger.log(`Payment started: order=${dto.orderId} txn=${demoTransactionId} method=${dto.method}`);
+    this.logger.log(
+      `Payment started: order=${dto.orderId} txn=${demoTransactionId} method=${dto.method}`,
+    );
 
     return {
       success: true,
@@ -130,7 +145,8 @@ export class PaymentsService {
     if (isSuccess) {
       updatePayload.paid_at = now;
     } else {
-      updatePayload.payment_failure_reason = 'Demo payment failed (simulated by client)';
+      updatePayload.payment_failure_reason =
+        'Demo payment failed (simulated by client)';
     }
 
     const { data, error } = await this.supabaseService.admin
@@ -178,11 +194,15 @@ export class PaymentsService {
     if (order.payment_status === PaymentStatus.PAID) {
       throw new BadRequestException({
         code: 'ALREADY_PAID',
-        message: 'This order has already been paid and cannot be changed to Pay Later.',
+        message:
+          'This order has already been paid and cannot be changed to Pay Later.',
       });
     }
 
-    const timeline = this.appendTimeline(order.timeline, 'User selected Pay Later');
+    const timeline = this.appendTimeline(
+      order.timeline,
+      'User selected Pay Later',
+    );
 
     const { data, error } = await this.supabaseService.admin
       .from('orders')
@@ -208,7 +228,8 @@ export class PaymentsService {
 
     return {
       success: true,
-      message: 'Order marked as Pay Later. You can complete payment at any time.',
+      message:
+        'Order marked as Pay Later. You can complete payment at any time.',
       order: {
         orderId: row.id,
         orderNumber: row.order_number,
@@ -241,7 +262,10 @@ export class PaymentsService {
       });
     }
 
-    const timeline = this.appendTimeline(order.timeline, 'Payment session reset by user');
+    const timeline = this.appendTimeline(
+      order.timeline,
+      'Payment session reset by user',
+    );
 
     const { data, error } = await this.supabaseService.admin
       .from('orders')
@@ -299,25 +323,34 @@ export class PaymentsService {
 
   // ── Private helpers ────────────────────────────────────────────
 
-  private async findOrderForUser(orderId: string, userId: string): Promise<OrderRow> {
+  private async findOrderForUser(
+    orderId: string,
+    userId: string,
+  ): Promise<OrderRow> {
     const { data, error } = await this.supabaseService.admin
       .from('orders')
       .select(
         'id, order_number, user_id, price_total, payment_status, payment_method, ' +
-        'demo_transaction_id, payment_currency, paid_at, payment_failure_reason, timeline, updated_at',
+          'demo_transaction_id, payment_currency, paid_at, payment_failure_reason, timeline, updated_at',
       )
       .eq('id', orderId)
       .single();
 
     if (error || !data) {
-      throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found.' });
+      throw new NotFoundException({
+        code: 'ORDER_NOT_FOUND',
+        message: 'Order not found.',
+      });
     }
 
     const row = data as unknown as OrderRow;
 
     // Return 404 (not 403) to avoid leaking that another user's order exists
     if (row.user_id !== userId) {
-      throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found.' });
+      throw new NotFoundException({
+        code: 'ORDER_NOT_FOUND',
+        message: 'Order not found.',
+      });
     }
 
     return row;
@@ -327,7 +360,10 @@ export class PaymentsService {
     existing: Array<{ event: string; timestamp: string }> | null,
     event: string,
   ): Array<{ event: string; timestamp: string }> {
-    return [...(existing ?? []), { event, timestamp: new Date().toISOString() }];
+    return [
+      ...(existing ?? []),
+      { event, timestamp: new Date().toISOString() },
+    ];
   }
 
   // Generates a collision-resistant demo transaction ID using crypto.randomBytes
@@ -336,7 +372,11 @@ export class PaymentsService {
   // Replace with the real gateway's order/payment ID when integrating.
   private generateDemoTransactionId(): string {
     const year = new Date().getFullYear();
-    const suffix = randomBytes(4).readUInt32BE(0).toString(36).toUpperCase().padStart(7, '0');
+    const suffix = randomBytes(4)
+      .readUInt32BE(0)
+      .toString(36)
+      .toUpperCase()
+      .padStart(7, '0');
     return `DEMO-TXN-${year}-${suffix}`;
   }
 }

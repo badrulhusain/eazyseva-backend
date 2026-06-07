@@ -24,7 +24,10 @@ let UsersService = class UsersService {
             .eq('id', userId)
             .single();
         if (error || !data) {
-            throw new common_1.NotFoundException({ code: 'PROFILE_NOT_FOUND', message: 'Profile not found' });
+            throw new common_1.NotFoundException({
+                code: 'PROFILE_NOT_FOUND',
+                message: 'Profile not found',
+            });
         }
         return data;
     }
@@ -41,7 +44,10 @@ let UsersService = class UsersService {
             .select('id, email, role, full_name, phone, created_at')
             .single();
         if (error || !data) {
-            throw new common_1.NotFoundException({ code: 'PROFILE_NOT_FOUND', message: 'Profile not found' });
+            throw new common_1.NotFoundException({
+                code: 'PROFILE_NOT_FOUND',
+                message: 'Profile not found',
+            });
         }
         return data;
     }

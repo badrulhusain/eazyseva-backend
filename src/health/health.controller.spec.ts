@@ -32,7 +32,10 @@ describe('HealthController', () => {
 
   describe('GET /health/db (readiness)', () => {
     it('returns success=true when Supabase RPC succeeds', async () => {
-      mockSupabaseService.admin.rpc.mockResolvedValueOnce({ data: 'ES-00001', error: null });
+      mockSupabaseService.admin.rpc.mockResolvedValueOnce({
+        data: 'ES-00001',
+        error: null,
+      });
       const result = await controller.readiness();
       expect(result.success).toBe(true);
       expect(result.status).toBe('ok');
@@ -52,7 +55,9 @@ describe('HealthController', () => {
     });
 
     it('returns success=false when Supabase RPC throws', async () => {
-      mockSupabaseService.admin.rpc.mockRejectedValueOnce(new Error('network error'));
+      mockSupabaseService.admin.rpc.mockRejectedValueOnce(
+        new Error('network error'),
+      );
       const result = await controller.readiness();
       expect(result.success).toBe(false);
       expect(result.status).toBe('degraded');

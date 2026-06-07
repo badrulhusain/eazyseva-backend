@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
@@ -18,11 +23,16 @@ export class JwtAuthGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
-    const request = context.switchToHttp().getRequest<Request & { user?: unknown }>();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: unknown }>();
     const token = this.extractBearerToken(request);
 
     if (!token) {
-      throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Login required' });
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Login required',
+      });
     }
 
     request.user = await this.authService.getUserFromAccessToken(token);

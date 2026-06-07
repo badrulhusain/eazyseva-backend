@@ -11,6 +11,16 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdateOrderStatusDto = void 0;
 const class_validator_1 = require("class-validator");
+const ORDER_STATUS_VALUES = [
+    'PENDING',
+    'UNDER_REVIEW',
+    'ACCEPTED',
+    'CORRECTION_REQUESTED',
+    'PROCESSING',
+    'COMPLETED',
+    'REJECTED',
+    'CANCELLED',
+];
 class UpdateOrderStatusDto {
     status;
     reason;
@@ -18,15 +28,17 @@ class UpdateOrderStatusDto {
 }
 exports.UpdateOrderStatusDto = UpdateOrderStatusDto;
 __decorate([
-    (0, class_validator_1.IsEnum)(['PENDING', 'ACCEPTED', 'PROCESSING', 'COMPLETED', 'REJECTED'], {
-        message: 'status must be one of: PENDING, ACCEPTED, PROCESSING, COMPLETED, REJECTED',
+    (0, class_validator_1.IsEnum)(ORDER_STATUS_VALUES, {
+        message: `status must be one of: ${ORDER_STATUS_VALUES.join(', ')}`,
     }),
     __metadata("design:type", String)
 ], UpdateOrderStatusDto.prototype, "status", void 0);
 __decorate([
-    (0, class_validator_1.ValidateIf)((o) => o.status === 'REJECTED'),
+    (0, class_validator_1.ValidateIf)((o) => o.status === 'REJECTED' || o.status === 'CORRECTION_REQUESTED'),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)({ message: 'reason is required when rejecting an order' }),
+    (0, class_validator_1.IsNotEmpty)({
+        message: 'reason is required when rejecting an order or requesting a correction',
+    }),
     (0, class_validator_1.MaxLength)(500, { message: 'reason must not exceed 500 characters' }),
     __metadata("design:type", String)
 ], UpdateOrderStatusDto.prototype, "reason", void 0);

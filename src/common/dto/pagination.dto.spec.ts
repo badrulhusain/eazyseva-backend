@@ -3,7 +3,9 @@ import { plainToInstance } from 'class-transformer';
 import { PaginationDto } from './pagination.dto';
 
 async function validateDto(plain: Record<string, unknown>) {
-  const dto = plainToInstance(PaginationDto, plain, { enableImplicitConversion: true });
+  const dto = plainToInstance(PaginationDto, plain, {
+    enableImplicitConversion: true,
+  });
   return validate(dto);
 }
 
@@ -14,7 +16,11 @@ describe('PaginationDto', () => {
   });
 
   it('defaults page to 1 and limit to 20 when not provided', async () => {
-    const dto = plainToInstance(PaginationDto, {}, { enableImplicitConversion: true });
+    const dto = plainToInstance(
+      PaginationDto,
+      {},
+      { enableImplicitConversion: true },
+    );
     expect(dto.page).toBe(1);
     expect(dto.limit).toBe(20);
   });

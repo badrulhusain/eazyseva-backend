@@ -36,7 +36,10 @@ let ServicesService = ServicesService_1 = class ServicesService {
         }
         const { data, error } = await query;
         if (error)
-            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+            throw new common_1.InternalServerErrorException({
+                code: 'DB_ERROR',
+                message: error.message,
+            });
         return data ?? [];
     }
     async findAllAdmin() {
@@ -46,7 +49,10 @@ let ServicesService = ServicesService_1 = class ServicesService {
             .order('is_popular', { ascending: false })
             .order('title', { ascending: true });
         if (error)
-            throw new common_1.InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+            throw new common_1.InternalServerErrorException({
+                code: 'DB_ERROR',
+                message: error.message,
+            });
         return data ?? [];
     }
     async findBySlug(slug) {
@@ -57,7 +63,10 @@ let ServicesService = ServicesService_1 = class ServicesService {
             .eq('is_active', true)
             .single();
         if (error || !data) {
-            throw new common_1.NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
+            throw new common_1.NotFoundException({
+                code: 'SERVICE_NOT_FOUND',
+                message: 'Service not found',
+            });
         }
         return data;
     }
@@ -151,7 +160,10 @@ let ServicesService = ServicesService_1 = class ServicesService {
             .select()
             .single();
         if (error || !data) {
-            throw new common_1.NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
+            throw new common_1.NotFoundException({
+                code: 'SERVICE_NOT_FOUND',
+                message: 'Service not found',
+            });
         }
         this.logger.log(`Service updated: ${id}`);
         if (dto.slug)
@@ -166,7 +178,10 @@ let ServicesService = ServicesService_1 = class ServicesService {
             .select('id')
             .single();
         if (error || !data) {
-            throw new common_1.NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
+            throw new common_1.NotFoundException({
+                code: 'SERVICE_NOT_FOUND',
+                message: 'Service not found',
+            });
         }
         this.logger.log(`Service soft-deleted: ${id}`);
         this.ordersService.invalidateServiceCache();

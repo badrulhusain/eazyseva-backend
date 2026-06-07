@@ -11,12 +11,14 @@ const common_1 = require("@nestjs/common");
 const orders_controller_1 = require("./orders.controller");
 const orders_service_1 = require("./orders.service");
 const supabase_module_1 = require("../supabase/supabase.module");
+const audit_logs_module_1 = require("../audit-logs/audit-logs.module");
+const documents_module_1 = require("../documents/documents.module");
 let OrdersModule = class OrdersModule {
 };
 exports.OrdersModule = OrdersModule;
 exports.OrdersModule = OrdersModule = __decorate([
     (0, common_1.Module)({
-        imports: [supabase_module_1.SupabaseModule],
+        imports: [supabase_module_1.SupabaseModule, audit_logs_module_1.AuditLogsModule, documents_module_1.DocumentsModule],
         controllers: [orders_controller_1.OrdersController, orders_controller_1.AdminOrdersController],
         providers: [orders_service_1.OrdersService],
         exports: [orders_service_1.OrdersService],

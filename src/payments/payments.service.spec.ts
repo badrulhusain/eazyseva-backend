@@ -23,7 +23,10 @@ function makeOrderRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function buildService(findOrderResult: unknown, updateResult?: { data: unknown; error: unknown }) {
+function buildService(
+  findOrderResult: unknown,
+  updateResult?: { data: unknown; error: unknown },
+) {
   const chain: any = {
     from: jest.fn().mockReturnThis(),
     select: jest.fn().mockReturnThis(),
@@ -36,9 +39,11 @@ function buildService(findOrderResult: unknown, updateResult?: { data: unknown; 
   chain.update.mockReturnValue({
     eq: jest.fn().mockReturnValue({
       select: jest.fn().mockReturnValue({
-        single: jest.fn().mockResolvedValue(
-          updateResult ?? { data: findOrderResult, error: null },
-        ),
+        single: jest
+          .fn()
+          .mockResolvedValue(
+            updateResult ?? { data: findOrderResult, error: null },
+          ),
       }),
     }),
   });
@@ -57,7 +62,10 @@ describe('PaymentsService', () => {
         error: null,
       });
       await expect(
-        service.startPayment({ orderId: 'order-1', method: 'DEMO_UPI' as any }, 'user-1'),
+        service.startPayment(
+          { orderId: 'order-1', method: 'DEMO_UPI' as any },
+          'user-1',
+        ),
       ).rejects.toMatchObject({ response: { code: 'ALREADY_PAID' } });
     });
 
@@ -71,14 +79,20 @@ describe('PaymentsService', () => {
         error: null,
       });
       await expect(
-        service.startPayment({ orderId: 'order-1', method: 'DEMO_UPI' as any }, 'user-1'),
+        service.startPayment(
+          { orderId: 'order-1', method: 'DEMO_UPI' as any },
+          'user-1',
+        ),
       ).rejects.toMatchObject({ response: { code: 'PAYMENT_IN_PROGRESS' } });
     });
 
     it('throws ORDER_NOT_FOUND when order does not exist', async () => {
       const service = buildService({ data: null, error: { code: 'PGRST116' } });
       await expect(
-        service.startPayment({ orderId: 'missing', method: 'DEMO_UPI' as any }, 'user-1'),
+        service.startPayment(
+          { orderId: 'missing', method: 'DEMO_UPI' as any },
+          'user-1',
+        ),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
@@ -91,7 +105,11 @@ describe('PaymentsService', () => {
       });
       await expect(
         service.confirmPayment(
-          { orderId: 'order-1', demoTransactionId: 'txn', result: DemoPaymentResult.SUCCESS },
+          {
+            orderId: 'order-1',
+            demoTransactionId: 'txn',
+            result: DemoPaymentResult.SUCCESS,
+          },
           'user-1',
         ),
       ).rejects.toMatchObject({ response: { code: 'INVALID_PAYMENT_STATE' } });
@@ -104,7 +122,11 @@ describe('PaymentsService', () => {
       });
       await expect(
         service.confirmPayment(
-          { orderId: 'order-1', demoTransactionId: 'txn', result: DemoPaymentResult.SUCCESS },
+          {
+            orderId: 'order-1',
+            demoTransactionId: 'txn',
+            result: DemoPaymentResult.SUCCESS,
+          },
           'user-1',
         ),
       ).rejects.toMatchObject({ response: { code: 'INVALID_PAYMENT_STATE' } });
@@ -120,10 +142,16 @@ describe('PaymentsService', () => {
       });
       await expect(
         service.confirmPayment(
-          { orderId: 'order-1', demoTransactionId: 'WRONG-TXN', result: DemoPaymentResult.SUCCESS },
+          {
+            orderId: 'order-1',
+            demoTransactionId: 'WRONG-TXN',
+            result: DemoPaymentResult.SUCCESS,
+          },
           'user-1',
         ),
-      ).rejects.toMatchObject({ response: { code: 'TRANSACTION_ID_MISMATCH' } });
+      ).rejects.toMatchObject({
+        response: { code: 'TRANSACTION_ID_MISMATCH' },
+      });
     });
   });
 
@@ -133,7 +161,9 @@ describe('PaymentsService', () => {
         data: makeOrderRow({ payment_status: PaymentStatus.PAID }),
         error: null,
       });
-      await expect(service.resetPayment('order-1', 'user-1')).rejects.toMatchObject({
+      await expect(
+        service.resetPayment('order-1', 'user-1'),
+      ).rejects.toMatchObject({
         response: { code: 'ALREADY_PAID' },
       });
     });
@@ -143,7 +173,9 @@ describe('PaymentsService', () => {
         data: makeOrderRow({ payment_status: PaymentStatus.NOT_PAID }),
         error: null,
       });
-      await expect(service.resetPayment('order-1', 'user-1')).rejects.toMatchObject({
+      await expect(
+        service.resetPayment('order-1', 'user-1'),
+      ).rejects.toMatchObject({
         response: { code: 'INVALID_PAYMENT_STATE' },
       });
     });
@@ -153,7 +185,9 @@ describe('PaymentsService', () => {
         data: makeOrderRow({ payment_status: PaymentStatus.FAILED }),
         error: null,
       });
-      await expect(service.resetPayment('order-1', 'user-1')).rejects.toMatchObject({
+      await expect(
+        service.resetPayment('order-1', 'user-1'),
+      ).rejects.toMatchObject({
         response: { code: 'INVALID_PAYMENT_STATE' },
       });
     });

@@ -10,7 +10,10 @@ import { Readable } from 'stream';
 import { v2 as cloudinaryV2 } from 'cloudinary';
 import type { UploadApiOptions, UploadApiResponse } from 'cloudinary';
 import { CLOUDINARY } from './cloudinary.provider';
-import { ALLOWED_MIME_TYPES, resolveResourceType } from './constants/allowed-file-types';
+import {
+  ALLOWED_MIME_TYPES,
+  resolveResourceType,
+} from './constants/allowed-file-types';
 import type { UploadResponseDto } from './dto/upload-response.dto';
 
 const RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
@@ -33,7 +36,10 @@ function isRetryable(err: unknown): boolean {
   const code = (err as any)?.error?.http_code ?? (err as any)?.http_code;
   const errCode = (err as any)?.code ?? (err as any)?.error?.code;
   // 499 = SDK timeout/abort; transient network errors
-  return code === 499 || ['EAI_AGAIN', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND'].includes(errCode);
+  return (
+    code === 499 ||
+    ['EAI_AGAIN', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND'].includes(errCode)
+  );
 }
 
 function sleep(ms: number) {
@@ -69,13 +75,17 @@ export class UploadsService {
 
     let result: UploadApiResponse;
     try {
-      result = await this.uploadWithRetry(file.buffer, {
-        folder,
-        resource_type: resourceType,
-        unique_filename: true,
-        overwrite: false,
-        use_filename: false,
-      }, rid);
+      result = await this.uploadWithRetry(
+        file.buffer,
+        {
+          folder,
+          resource_type: resourceType,
+          unique_filename: true,
+          overwrite: false,
+          use_filename: false,
+        },
+        rid,
+      );
     } catch (err) {
       const ms = Date.now() - start;
       this.logger.error(
@@ -177,7 +187,8 @@ export class UploadsService {
     if (!files || files.length === 0) {
       throw new BadRequestException({
         code: 'NO_FILES',
-        message: 'At least one file must be uploaded. Attach files using field name "files".',
+        message:
+          'At least one file must be uploaded. Attach files using field name "files".',
       });
     }
 
@@ -238,7 +249,10 @@ export class UploadsService {
 
     for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
       try {
-        return await this.streamUpload(buffer, { ...options, timeout: timeoutMs });
+        return await this.streamUpload(buffer, {
+          ...options,
+          timeout: timeoutMs,
+        });
       } catch (err) {
         lastError = err;
         if (!isRetryable(err) || attempt === RETRY_DELAYS_MS.length) break;
@@ -251,7 +265,10 @@ export class UploadsService {
     }
 
     const isTimeout = isRetryable(lastError);
-    this.logger.error(`Cloudinary upload failed after all retries rid=${rid}`, lastError);
+    this.logger.error(
+      `Cloudinary upload failed after all retries rid=${rid}`,
+      lastError,
+    );
 
     throw new InternalServerErrorException({
       code: 'CLOUDINARY_UPLOAD_FAILED',
@@ -262,7 +279,10 @@ export class UploadsService {
   }
 
   // Streams the buffer directly to Cloudinary — no base64 encoding overhead.
-  private streamUpload(buffer: Buffer, options: UploadApiOptions): Promise<UploadApiResponse> {
+  private streamUpload(
+    buffer: Buffer,
+    options: UploadApiOptions,
+  ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = this.cloudinary.uploader.upload_stream(
         options,
@@ -284,10 +304,13 @@ export class UploadsService {
 
     for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
       try {
-        const result = await (this.cloudinary.uploader.destroy as Function)(publicId, {
-          resource_type: resourceType,
-          timeout: timeoutMs,
-        });
+        const result = await (this.cloudinary.uploader.destroy as Function)(
+          publicId,
+          {
+            resource_type: resourceType,
+            timeout: timeoutMs,
+          },
+        );
 
         if (result.result !== 'ok' && result.result !== 'not found') {
           throw new InternalServerErrorException({
@@ -301,7 +324,9 @@ export class UploadsService {
         lastError = err;
         if (!isRetryable(err) || attempt === RETRY_DELAYS_MS.length) break;
         const delay = RETRY_DELAYS_MS[attempt];
-        this.logger.warn(`Cloudinary delete attempt ${attempt + 1} failed, retrying in ${delay}ms`);
+        this.logger.warn(
+          `Cloudinary delete attempt ${attempt + 1} failed, retrying in ${delay}ms`,
+        );
         await sleep(delay);
       }
     }

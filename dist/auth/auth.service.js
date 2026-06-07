@@ -34,11 +34,18 @@ let AuthService = AuthService_1 = class AuthService {
         });
         if (error) {
             const msg = error.message.toLowerCase();
-            if (msg.includes('already') || (msg.includes('email') && msg.includes('registered'))) {
-                throw new common_1.ConflictException({ code: 'EMAIL_TAKEN', message: 'Email is already registered' });
+            if (msg.includes('already') ||
+                (msg.includes('email') && msg.includes('registered'))) {
+                throw new common_1.ConflictException({
+                    code: 'EMAIL_TAKEN',
+                    message: 'Email is already registered',
+                });
             }
             this.logger.error(`Registration failed for ${dto.email}: ${error.message}`);
-            throw new common_1.InternalServerErrorException({ code: 'REGISTER_FAILED', message: error.message });
+            throw new common_1.InternalServerErrorException({
+                code: 'REGISTER_FAILED',
+                message: error.message,
+            });
         }
         this.logger.log(`User registered: ${data.user.id}`);
         const { error: profileError } = await this.supabaseService.admin
@@ -124,7 +131,10 @@ let AuthService = AuthService_1 = class AuthService {
                     this.tokenCache.delete(oldest);
             }
         }
-        this.tokenCache.set(token, { user, expiresAt: Date.now() + this.TOKEN_CACHE_TTL });
+        this.tokenCache.set(token, {
+            user,
+            expiresAt: Date.now() + this.TOKEN_CACHE_TTL,
+        });
     }
     async resolveCurrentUser(user) {
         const { data: profile, error } = await this.supabaseService.admin

@@ -14,7 +14,10 @@ export class UsersService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException({ code: 'PROFILE_NOT_FOUND', message: 'Profile not found' });
+      throw new NotFoundException({
+        code: 'PROFILE_NOT_FOUND',
+        message: 'Profile not found',
+      });
     }
 
     return data;
@@ -33,7 +36,10 @@ export class UsersService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException({ code: 'PROFILE_NOT_FOUND', message: 'Profile not found' });
+      throw new NotFoundException({
+        code: 'PROFILE_NOT_FOUND',
+        message: 'Profile not found',
+      });
     }
 
     return data;

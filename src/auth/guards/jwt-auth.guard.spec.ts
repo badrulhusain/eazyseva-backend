@@ -12,7 +12,9 @@ function buildContext(overrides: {
   authorization?: string;
 }): ExecutionContext {
   const reflector = new Reflector();
-  jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(overrides.isPublic ?? false);
+  jest
+    .spyOn(reflector, 'getAllAndOverride')
+    .mockReturnValue(overrides.isPublic ?? false);
 
   return {
     getHandler: () => ({}),
@@ -20,7 +22,9 @@ function buildContext(overrides: {
     switchToHttp: () => ({
       getRequest: () => ({
         headers: {
-          ...(overrides.authorization ? { authorization: overrides.authorization } : {}),
+          ...(overrides.authorization
+            ? { authorization: overrides.authorization }
+            : {}),
         },
         user: undefined,
       }),
@@ -52,19 +56,25 @@ describe('JwtAuthGuard', () => {
     it('throws UnauthorizedException when Authorization header is missing', async () => {
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
       const ctx = buildContext({});
-      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
     });
 
     it('throws UnauthorizedException when scheme is not bearer', async () => {
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
       const ctx = buildContext({ authorization: 'Basic dXNlcjpwYXNz' });
-      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
     });
 
     it('throws UnauthorizedException when token is missing after "bearer"', async () => {
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
       const ctx = buildContext({ authorization: 'Bearer' });
-      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
     });
 
     it('attaches user to request on valid token', async () => {
@@ -72,7 +82,10 @@ describe('JwtAuthGuard', () => {
       const fakeUser = { id: 'u1', email: 'a@b.com', role: 'USER' };
       mockAuthService.getUserFromAccessToken.mockResolvedValueOnce(fakeUser);
 
-      const req: any = { headers: { authorization: 'Bearer valid-token' }, user: undefined };
+      const req: any = {
+        headers: { authorization: 'Bearer valid-token' },
+        user: undefined,
+      };
       const ctx = {
         getHandler: () => ({}),
         getClass: () => ({}),
@@ -82,7 +95,9 @@ describe('JwtAuthGuard', () => {
       const result = await guard.canActivate(ctx);
       expect(result).toBe(true);
       expect(req.user).toEqual(fakeUser);
-      expect(mockAuthService.getUserFromAccessToken).toHaveBeenCalledWith('valid-token');
+      expect(mockAuthService.getUserFromAccessToken).toHaveBeenCalledWith(
+        'valid-token',
+      );
     });
 
     it('propagates UnauthorizedException from authService', async () => {
@@ -90,14 +105,19 @@ describe('JwtAuthGuard', () => {
       mockAuthService.getUserFromAccessToken.mockRejectedValueOnce(
         new UnauthorizedException({ code: 'UNAUTHORIZED' }),
       );
-      const req: any = { headers: { authorization: 'Bearer bad-token' }, user: undefined };
+      const req: any = {
+        headers: { authorization: 'Bearer bad-token' },
+        user: undefined,
+      };
       const ctx = {
         getHandler: () => ({}),
         getClass: () => ({}),
         switchToHttp: () => ({ getRequest: () => req }),
       } as unknown as ExecutionContext;
 
-      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
     });
   });
 });

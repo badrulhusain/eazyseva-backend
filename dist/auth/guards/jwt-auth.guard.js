@@ -28,10 +28,15 @@ let JwtAuthGuard = class JwtAuthGuard {
         ]);
         if (isPublic)
             return true;
-        const request = context.switchToHttp().getRequest();
+        const request = context
+            .switchToHttp()
+            .getRequest();
         const token = this.extractBearerToken(request);
         if (!token) {
-            throw new common_1.UnauthorizedException({ code: 'UNAUTHORIZED', message: 'Login required' });
+            throw new common_1.UnauthorizedException({
+                code: 'UNAUTHORIZED',
+                message: 'Login required',
+            });
         }
         request.user = await this.authService.getUserFromAccessToken(token);
         return true;

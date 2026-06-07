@@ -21,6 +21,10 @@ const orders_module_1 = require("./orders/orders.module");
 const uploads_module_1 = require("./uploads/uploads.module");
 const payments_module_1 = require("./payments/payments.module");
 const health_module_1 = require("./health/health.module");
+const audit_logs_module_1 = require("./audit-logs/audit-logs.module");
+const consent_module_1 = require("./consent/consent.module");
+const blogs_module_1 = require("./blogs/blogs.module");
+const documents_module_1 = require("./documents/documents.module");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
 const request_id_middleware_1 = require("./common/middleware/request-id.middleware");
 const request_logger_middleware_1 = require("./common/middleware/request-logger.middleware");
@@ -28,7 +32,6 @@ function validateEnv(config) {
     const required = [
         'SUPABASE_URL',
         'SUPABASE_ANON_KEY',
-        'SUPABASE_JWT_SECRET',
         'SUPABASE_SERVICE_ROLE_KEY',
         'CLOUDINARY_CLOUD_NAME',
         'CLOUDINARY_API_KEY',
@@ -42,9 +45,7 @@ function validateEnv(config) {
 }
 let AppModule = class AppModule {
     configure(consumer) {
-        consumer
-            .apply(request_id_middleware_1.RequestIdMiddleware, request_logger_middleware_1.RequestLoggerMiddleware)
-            .forRoutes('*');
+        consumer.apply(request_id_middleware_1.RequestIdMiddleware, request_logger_middleware_1.RequestLoggerMiddleware).forRoutes('*');
     }
 };
 exports.AppModule = AppModule;
@@ -55,9 +56,7 @@ exports.AppModule = AppModule = __decorate([
                 isGlobal: true,
                 validate: validateEnv,
             }),
-            throttler_1.ThrottlerModule.forRoot([
-                { name: 'default', ttl: 60_000, limit: 100 },
-            ]),
+            throttler_1.ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
             supabase_module_1.SupabaseModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
@@ -66,6 +65,10 @@ exports.AppModule = AppModule = __decorate([
             uploads_module_1.UploadsModule,
             payments_module_1.PaymentsModule,
             health_module_1.HealthModule,
+            audit_logs_module_1.AuditLogsModule,
+            consent_module_1.ConsentModule,
+            blogs_module_1.BlogsModule,
+            documents_module_1.DocumentsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

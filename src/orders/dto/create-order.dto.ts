@@ -21,11 +21,15 @@ export class CustomerDto {
   name: string;
 
   @Matches(/^[6-9]\d{9}$/, {
-    message: 'phone must be a valid 10-digit Indian mobile number starting with 6–9',
+    message:
+      'phone must be a valid 10-digit Indian mobile number starting with 6–9',
   })
   phone: string;
 
-  @IsDateString({}, { message: 'dateOfBirth must be a valid ISO 8601 date (e.g. 1990-05-15)' })
+  @IsDateString(
+    {},
+    { message: 'dateOfBirth must be a valid ISO 8601 date (e.g. 1990-05-15)' },
+  )
   dateOfBirth: string;
 
   @IsString()
@@ -41,9 +45,12 @@ export class DocumentDto {
   name: string;
 
   // Must be a valid HTTPS URL — prevents raw strings from being stored as document references
-  @IsUrl({ protocols: ['https'], require_protocol: true }, {
-    message: 'url must be a valid HTTPS URL',
-  })
+  @IsUrl(
+    { protocols: ['https'], require_protocol: true },
+    {
+      message: 'url must be a valid HTTPS URL',
+    },
+  )
   url: string;
 
   @IsString()

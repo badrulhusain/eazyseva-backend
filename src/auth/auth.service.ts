@@ -32,30 +32,45 @@ export class AuthService {
   // cache is full we evict expired entries first; if none are expired we evict the
   // oldest (FIFO) to stay bounded.
 
-  private readonly tokenCache = new Map<string, { user: CurrentUser; expiresAt: number }>();
-  private readonly TOKEN_CACHE_TTL = 60_000;   // 60 seconds
+  private readonly tokenCache = new Map<
+    string,
+    { user: CurrentUser; expiresAt: number }
+  >();
+  private readonly TOKEN_CACHE_TTL = 60_000; // 60 seconds
   private readonly TOKEN_CACHE_MAX = 500;
 
   // ── Public auth methods ────────────────────────────────────────────────────
 
   async register(dto: RegisterDto) {
-    const { data, error } = await this.supabaseService.admin.auth.admin.createUser({
-      email: dto.email,
-      password: dto.password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: dto.full_name,
-        phone: dto.phone,
-      },
-    });
+    const { data, error } =
+      await this.supabaseService.admin.auth.admin.createUser({
+        email: dto.email,
+        password: dto.password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: dto.full_name,
+          phone: dto.phone,
+        },
+      });
 
     if (error) {
       const msg = error.message.toLowerCase();
-      if (msg.includes('already') || (msg.includes('email') && msg.includes('registered'))) {
-        throw new ConflictException({ code: 'EMAIL_TAKEN', message: 'Email is already registered' });
+      if (
+        msg.includes('already') ||
+        (msg.includes('email') && msg.includes('registered'))
+      ) {
+        throw new ConflictException({
+          code: 'EMAIL_TAKEN',
+          message: 'Email is already registered',
+        });
       }
-      this.logger.error(`Registration failed for ${dto.email}: ${error.message}`);
-      throw new InternalServerErrorException({ code: 'REGISTER_FAILED', message: error.message });
+      this.logger.error(
+        `Registration failed for ${dto.email}: ${error.message}`,
+      );
+      throw new InternalServerErrorException({
+        code: 'REGISTER_FAILED',
+        message: error.message,
+      });
     }
 
     this.logger.log(`User registered: ${data.user.id}`);
@@ -92,10 +107,11 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const { data, error } = await this.supabaseService.supabase.auth.signInWithPassword({
-      email: dto.email,
-      password: dto.password,
-    });
+    const { data, error } =
+      await this.supabaseService.supabase.auth.signInWithPassword({
+        email: dto.email,
+        password: dto.password,
+      });
 
     if (error || !data.session || !data.user) {
       throw new UnauthorizedException({
@@ -143,7 +159,8 @@ export class AuthService {
       return cached.user;
     }
 
-    const { data, error } = await this.supabaseService.supabase.auth.getUser(token);
+    const { data, error } =
+      await this.supabaseService.supabase.auth.getUser(token);
 
     if (error || !data.user) {
       this.tokenCache.delete(token);
@@ -176,7 +193,10 @@ export class AuthService {
         if (oldest !== undefined) this.tokenCache.delete(oldest);
       }
     }
-    this.tokenCache.set(token, { user, expiresAt: Date.now() + this.TOKEN_CACHE_TTL });
+    this.tokenCache.set(token, {
+      user,
+      expiresAt: Date.now() + this.TOKEN_CACHE_TTL,
+    });
   }
 
   /**
@@ -188,7 +208,9 @@ export class AuthService {
    * Falls back to user_metadata if the profile row does not yet exist and
    * auto-creates the missing profile row.
    */
-  async resolveCurrentUser(user: Pick<User, 'id' | 'email' | 'user_metadata'>): Promise<CurrentUser> {
+  async resolveCurrentUser(
+    user: Pick<User, 'id' | 'email' | 'user_metadata'>,
+  ): Promise<CurrentUser> {
     const { data: profile, error } = await this.supabaseService.admin
       .from('profiles')
       .select('id, email, role, full_name, phone')

@@ -1,13 +1,11 @@
 import { Module } from '@nestjs/common';
-import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { SupabaseJwtStrategy } from './strategies/supabase-jwt.strategy';
+import { AdminGuard } from './guards/admin.guard';
 
 @Module({
-  imports: [PassportModule.register({ defaultStrategy: 'supabase-jwt' })],
   controllers: [AuthController],
-  providers: [AuthService, SupabaseJwtStrategy],
-  exports: [AuthService, PassportModule, SupabaseJwtStrategy],
+  providers: [AuthService, AdminGuard],
+  exports: [AuthService, AdminGuard],
 })
 export class AuthModule {}

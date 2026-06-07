@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { OrdersService } from '../orders/orders.service';
-import type { ServiceCategory, ServiceListItem, ServiceItem } from './services.types';
+import type {
+  ServiceCategory,
+  ServiceListItem,
+  ServiceItem,
+} from './services.types';
 import type { CreateServiceDto } from './dto/create-service.dto';
 import type { UpdateServiceDto } from './dto/update-service.dto';
 
@@ -39,7 +43,11 @@ export class ServicesService {
     }
 
     const { data, error } = await query;
-    if (error) throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+    if (error)
+      throw new InternalServerErrorException({
+        code: 'DB_ERROR',
+        message: error.message,
+      });
     return data ?? [];
   }
 
@@ -50,7 +58,11 @@ export class ServicesService {
       .order('is_popular', { ascending: false })
       .order('title', { ascending: true });
 
-    if (error) throw new InternalServerErrorException({ code: 'DB_ERROR', message: error.message });
+    if (error)
+      throw new InternalServerErrorException({
+        code: 'DB_ERROR',
+        message: error.message,
+      });
     return data ?? [];
   }
 
@@ -63,7 +75,10 @@ export class ServicesService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
+      throw new NotFoundException({
+        code: 'SERVICE_NOT_FOUND',
+        message: 'Service not found',
+      });
     }
     return data;
   }
@@ -137,10 +152,14 @@ export class ServicesService {
     if (dto.category !== undefined) patch.category = dto.category;
     if (dto.price !== undefined) patch.price = dto.price;
     if (dto.govtFee !== undefined) patch.govt_fee = dto.govtFee;
-    if (dto.processingFee !== undefined) patch.processing_fee = dto.processingFee;
-    if (dto.deliveryDaysMin !== undefined) patch.delivery_days_min = dto.deliveryDaysMin;
-    if (dto.deliveryDaysMax !== undefined) patch.delivery_days_max = dto.deliveryDaysMax;
-    if (dto.requiredDocuments !== undefined) patch.required_documents = dto.requiredDocuments;
+    if (dto.processingFee !== undefined)
+      patch.processing_fee = dto.processingFee;
+    if (dto.deliveryDaysMin !== undefined)
+      patch.delivery_days_min = dto.deliveryDaysMin;
+    if (dto.deliveryDaysMax !== undefined)
+      patch.delivery_days_max = dto.deliveryDaysMax;
+    if (dto.requiredDocuments !== undefined)
+      patch.required_documents = dto.requiredDocuments;
     if (dto.icon !== undefined) patch.icon = dto.icon;
     if (dto.isPopular !== undefined) patch.is_popular = dto.isPopular;
     if (dto.isActive !== undefined) patch.is_active = dto.isActive;
@@ -153,7 +172,10 @@ export class ServicesService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
+      throw new NotFoundException({
+        code: 'SERVICE_NOT_FOUND',
+        message: 'Service not found',
+      });
     }
     this.logger.log(`Service updated: ${id}`);
     // Invalidate by slug (new or old) so prices are fresh immediately
@@ -170,7 +192,10 @@ export class ServicesService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
+      throw new NotFoundException({
+        code: 'SERVICE_NOT_FOUND',
+        message: 'Service not found',
+      });
     }
     this.logger.log(`Service soft-deleted: ${id}`);
     // Slug unknown at this point — clear the whole cache to be safe
