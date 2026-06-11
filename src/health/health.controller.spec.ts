@@ -2,7 +2,7 @@ import { HealthController } from './health.controller';
 
 const mockSupabaseService = {
   admin: {
-    rpc: jest.fn(),
+    from: jest.fn(),
   },
 };
 
@@ -31,36 +31,50 @@ describe('HealthController', () => {
   });
 
   describe('GET /health/db (readiness)', () => {
-    it('returns success=true when Supabase RPC succeeds', async () => {
-      mockSupabaseService.admin.rpc.mockResolvedValueOnce({
-        data: 'ES-00001',
-        error: null,
+    it('returns success=true when Supabase read succeeds', async () => {
+      const limit = jest.fn().mockResolvedValueOnce({ error: null });
+      mockSupabaseService.admin.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        limit,
       });
+
       const result = await controller.readiness();
       expect(result.success).toBe(true);
       expect(result.status).toBe('ok');
       expect((result as any).db?.connected).toBe(true);
       expect(typeof (result as any).db?.latencyMs).toBe('number');
+      expect(mockSupabaseService.admin.from).toHaveBeenCalledWith('services');
     });
 
-    it('returns success=false when Supabase RPC returns an error', async () => {
-      mockSupabaseService.admin.rpc.mockResolvedValueOnce({
-        data: null,
+    it('returns success=false when Supabase read returns an error', async () => {
+      const response = { status: jest.fn() };
+      const limit = jest.fn().mockResolvedValueOnce({
         error: { message: 'connection refused' },
       });
-      const result = await controller.readiness();
+      mockSupabaseService.admin.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        limit,
+      });
+
+      const result = await controller.readiness(response as any);
       expect(result.success).toBe(false);
       expect(result.status).toBe('degraded');
       expect((result as any).db?.connected).toBe(false);
+      expect(response.status).toHaveBeenCalledWith(503);
     });
 
-    it('returns success=false when Supabase RPC throws', async () => {
-      mockSupabaseService.admin.rpc.mockRejectedValueOnce(
-        new Error('network error'),
-      );
-      const result = await controller.readiness();
+    it('returns success=false when Supabase read throws', async () => {
+      const response = { status: jest.fn() };
+      const limit = jest.fn().mockRejectedValueOnce(new Error('network error'));
+      mockSupabaseService.admin.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        limit,
+      });
+
+      const result = await controller.readiness(response as any);
       expect(result.success).toBe(false);
       expect(result.status).toBe('degraded');
+      expect(response.status).toHaveBeenCalledWith(503);
     });
   });
 });

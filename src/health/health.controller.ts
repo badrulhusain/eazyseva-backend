@@ -1,4 +1,5 @@
-import { Controller, Get, Logger } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Logger, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { Public } from '../auth/decorators/public.decorator';
 import { SupabaseService } from '../supabase/supabase.service';
 
@@ -28,25 +29,22 @@ export class HealthController {
   /**
    * GET /api/v1/health/db
    *
-   * Readiness probe — verifies Supabase DB connectivity with a cheap RPC call.
-   * Returns 200 on success, 503 on failure. Not called by load balancers —
-   * use for on-demand checks only.
+   * Readiness probe — verifies Supabase DB connectivity with a side-effect-free
+   * read. Returns 200 on success, 503 on failure.
    */
   @Public()
   @Get('db')
-  async readiness() {
+  async readiness(@Res({ passthrough: true }) response?: Response) {
     const start = Date.now();
     try {
-      // next_order_number is an existing cheap sequence function.
-      // Any lightweight query or rpc works here; we discard the result.
-      const { error } =
-        await this.supabaseService.admin.rpc('next_order_number');
-
-      // Roll back the sequence increment immediately — we only care about connectivity.
-      // In production replace with a dedicated health-check RPC or a cheap SELECT 1.
+      const { error } = await this.supabaseService.admin
+        .from('services')
+        .select('id', { head: true, count: 'exact' })
+        .limit(1);
       const latencyMs = Date.now() - start;
 
       if (error) {
+        response?.status(HttpStatus.SERVICE_UNAVAILABLE);
         this.logger.warn(
           `DB health check failed: ${error.message} (${latencyMs}ms)`,
         );
@@ -69,6 +67,7 @@ export class HealthController {
     } catch (err) {
       const latencyMs = Date.now() - start;
       const message = err instanceof Error ? err.message : String(err);
+      response?.status(HttpStatus.SERVICE_UNAVAILABLE);
       this.logger.error(`DB health check threw: ${message} (${latencyMs}ms)`);
       return {
         success: false,

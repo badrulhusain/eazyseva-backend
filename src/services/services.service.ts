@@ -24,6 +24,15 @@ const DETAIL_COLUMNS =
 @Injectable()
 export class ServicesService {
   private readonly logger = new Logger(ServicesService.name);
+  private readonly publicListCache = new Map<
+    string,
+    { data: ServiceListItem[]; expiresAt: number }
+  >();
+  private readonly publicDetailCache = new Map<
+    string,
+    { data: ServiceItem; expiresAt: number }
+  >();
+  private readonly PUBLIC_CACHE_TTL = 30_000;
 
   constructor(
     private readonly supabaseService: SupabaseService,
@@ -31,6 +40,10 @@ export class ServicesService {
   ) {}
 
   async findAll(category?: ServiceCategory): Promise<ServiceListItem[]> {
+    const cacheKey = category ?? '__all__';
+    const cached = this.publicListCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
     let query = this.supabaseService.admin
       .from('services')
       .select(LIST_COLUMNS)
@@ -48,7 +61,12 @@ export class ServicesService {
         code: 'DB_ERROR',
         message: error.message,
       });
-    return data ?? [];
+    const services = (data ?? []) as ServiceListItem[];
+    this.publicListCache.set(cacheKey, {
+      data: services,
+      expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
+    });
+    return services;
   }
 
   async findAllAdmin(): Promise<ServiceItem[]> {
@@ -67,6 +85,9 @@ export class ServicesService {
   }
 
   async findBySlug(slug: string): Promise<ServiceItem> {
+    const cached = this.publicDetailCache.get(slug);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
     const { data, error } = await this.supabaseService.admin
       .from('services')
       .select(DETAIL_COLUMNS)
@@ -80,7 +101,12 @@ export class ServicesService {
         message: 'Service not found',
       });
     }
-    return data;
+    const service = data as ServiceItem;
+    this.publicDetailCache.set(slug, {
+      data: service,
+      expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
+    });
+    return service;
   }
 
   async create(dto: CreateServiceDto) {
@@ -124,7 +150,8 @@ export class ServicesService {
       });
     }
     this.logger.log(`Service created: ${data.id} slug=${dto.slug}`);
-    this.ordersService.invalidateServiceCache(dto.slug);
+    this.invalidatePublicCache();
+    this.ordersService.invalidateServiceCache();
     return data;
   }
 
@@ -178,8 +205,8 @@ export class ServicesService {
       });
     }
     this.logger.log(`Service updated: ${id}`);
-    // Invalidate by slug (new or old) so prices are fresh immediately
-    if (dto.slug) this.ordersService.invalidateServiceCache(dto.slug);
+    this.invalidatePublicCache();
+    this.ordersService.invalidateServiceCache();
     return data;
   }
 
@@ -198,8 +225,13 @@ export class ServicesService {
       });
     }
     this.logger.log(`Service soft-deleted: ${id}`);
-    // Slug unknown at this point — clear the whole cache to be safe
+    this.invalidatePublicCache();
     this.ordersService.invalidateServiceCache();
     return { deleted: true, id };
+  }
+
+  private invalidatePublicCache(): void {
+    this.publicListCache.clear();
+    this.publicDetailCache.clear();
   }
 }

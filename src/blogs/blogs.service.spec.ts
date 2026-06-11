@@ -8,6 +8,7 @@ function buildSupabaseMock(opts: {
   insertResolved: { data: unknown; error: unknown };
 }) {
   let slugCallIndex = 0;
+  let currentSlugBatch: string[] = [];
 
   const insertChain: any = {
     select: jest.fn().mockReturnThis(),
@@ -17,17 +18,20 @@ function buildSupabaseMock(opts: {
   const lookupChain: any = {
     select: jest.fn().mockReturnThis(),
     eq: jest.fn().mockReturnThis(),
+    in: jest.fn((_column: string, values: string[]) => {
+      currentSlugBatch = values;
+      return lookupChain;
+    }),
     neq: jest.fn().mockReturnThis(),
     is: jest.fn().mockReturnThis(),
     order: jest.fn().mockReturnThis(),
     range: jest.fn().mockReturnThis(),
     ilike: jest.fn().mockReturnThis(),
-    maybeSingle: jest.fn().mockImplementation(() =>
-      Promise.resolve({
-        data: opts.slugLookupResults[slugCallIndex++] ?? null,
-        error: null,
-      }),
-    ),
+    then: jest.fn((resolve, reject) => {
+      const next = opts.slugLookupResults[slugCallIndex++] ?? null;
+      const data = next ? [{ ...next, slug: currentSlugBatch[0] }] : [];
+      return Promise.resolve({ data, error: null }).then(resolve, reject);
+    }),
   };
 
   const from = jest.fn((_table: string) => ({

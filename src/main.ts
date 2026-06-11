@@ -1,9 +1,11 @@
 import 'dotenv/config';
+import compression from 'compression';
 import helmet from 'helmet';
-import { Logger } from '@nestjs/common';
+import { HttpStatus, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
@@ -17,6 +19,9 @@ async function bootstrap() {
   // ── Security headers ────────────────────────────────────────────────────────
   app.use(helmet());
 
+  // ── Response compression ───────────────────────────────────────────────────
+  app.use(compression());
+
   // ── CORS ────────────────────────────────────────────────────────────────────
   const allowedOrigins = (
     process.env.CLIENT_URLS ??
@@ -26,6 +31,25 @@ async function bootstrap() {
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
+
+  app.use((request: Request, response: Response, next: NextFunction) => {
+    const origin = request.headers.origin;
+    if (!origin || allowedOrigins.includes(origin)) {
+      next();
+      return;
+    }
+
+    const rid = request.requestId ?? '-';
+    logger.warn(`CORS rejected origin: ${origin}`);
+    response.status(HttpStatus.FORBIDDEN).json({
+      success: false,
+      code: 'FORBIDDEN',
+      message: 'Origin is not allowed by CORS policy',
+      path: request.originalUrl,
+      timestamp: new Date().toISOString(),
+      requestId: rid,
+    });
+  });
 
   app.enableCors({
     origin: (
@@ -37,10 +61,7 @@ async function bootstrap() {
         callback(null, true);
         return;
       }
-      // Log the rejected origin so we can detect misconfigured frontends and
-      // legitimate CORS policy violations without exposing the reason to the client.
-      logger.warn(`CORS rejected origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+      callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],

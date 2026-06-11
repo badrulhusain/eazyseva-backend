@@ -36,6 +36,24 @@ function slugify(value: string): string {
 @Injectable()
 export class BlogsService {
   private readonly logger = new Logger(BlogsService.name);
+  private readonly publicListCache = new Map<
+    string,
+    {
+      data: {
+        data: BlogSummary[];
+        total: number;
+        page: number;
+        limit: number;
+      };
+      expiresAt: number;
+    }
+  >();
+  private readonly publicDetailCache = new Map<
+    string,
+    { data: Blog; expiresAt: number }
+  >();
+  private readonly PUBLIC_CACHE_TTL = 30_000;
+
   constructor(private readonly supabaseService: SupabaseService) {}
 
   // ── Admin: create ─────────────────────────────────────────────────
@@ -84,6 +102,7 @@ export class BlogsService {
     this.logger.log(
       `Blog created: ${blog.id} slug=${blog.slug} status=${blog.status} author=${authorId}`,
     );
+    this.invalidatePublicCache();
     return blog;
   }
 
@@ -138,6 +157,7 @@ export class BlogsService {
     this.logger.log(
       `Blog updated: ${updated.id} slug=${updated.slug} status=${current.status}→${updated.status}`,
     );
+    this.invalidatePublicCache();
     return updated;
   }
 
@@ -160,7 +180,9 @@ export class BlogsService {
       });
     }
 
-    return BlogsService.formatRow(data as unknown as BlogRow);
+    const blog = BlogsService.formatRow(data as unknown as BlogRow);
+    this.invalidatePublicCache();
+    return blog;
   }
 
   // ── Admin: list / detail ──────────────────────────────────────────
@@ -241,6 +263,10 @@ export class BlogsService {
     limit: number;
   }> {
     const { page, limit, search, category } = query;
+    const cacheKey = BlogsService.publicListCacheKey(query);
+    const cached = this.publicListCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -263,7 +289,7 @@ export class BlogsService {
       });
     }
 
-    return {
+    const result = {
       data: ((data ?? []) as unknown as Partial<BlogRow>[]).map(
         BlogsService.formatSummaryRow,
       ),
@@ -271,9 +297,17 @@ export class BlogsService {
       page,
       limit,
     };
+    this.publicListCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
+    });
+    return result;
   }
 
   async findBySlug(slug: string): Promise<Blog> {
+    const cached = this.publicDetailCache.get(slug);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
     const { data, error } = await this.supabaseService.admin
       .from('blogs')
       .select(BLOG_FULL_COLS)
@@ -295,34 +329,51 @@ export class BlogsService {
       });
     }
 
-    return BlogsService.formatRow(data as unknown as BlogRow);
+    const blog = BlogsService.formatRow(data as unknown as BlogRow);
+    this.publicDetailCache.set(slug, {
+      data: blog,
+      expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
+    });
+    return blog;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────
 
-  /** Appends -2, -3, … until the slug is unique (excluding the row being updated, if any). */
+  /** Finds a free slug in small batches instead of probing one collision per DB round-trip. */
   private async generateUniqueSlug(
     baseSlug: string,
     excludeId?: string,
   ): Promise<string> {
-    let candidate = baseSlug;
-    for (let suffix = 2; suffix <= 1000; suffix++) {
+    const batchSize = 25;
+    const maxSuffix = 1000;
+    const candidates = [baseSlug];
+
+    for (let suffix = 2; suffix <= maxSuffix; suffix++) {
+      candidates.push(`${baseSlug}-${suffix}`);
+    }
+
+    for (let start = 0; start < candidates.length; start += batchSize) {
+      const batch = candidates.slice(start, start + batchSize);
+
       let q = this.supabaseService.admin
         .from('blogs')
-        .select('id')
-        .eq('slug', candidate);
+        .select('slug')
+        .in('slug', batch);
       if (excludeId) q = q.neq('id', excludeId);
 
-      const { data, error } = await q.maybeSingle();
+      const { data, error } = await q;
       if (error) {
         throw new InternalServerErrorException({
           code: 'DB_ERROR',
           message: error.message,
         });
       }
-      if (!data) return candidate;
 
-      candidate = `${baseSlug}-${suffix}`;
+      const taken = new Set(
+        ((data ?? []) as Array<{ slug: string }>).map((row) => row.slug),
+      );
+      const available = batch.find((candidate) => !taken.has(candidate));
+      if (available) return available;
     }
 
     throw new InternalServerErrorException({
@@ -365,5 +416,19 @@ export class BlogsService {
       createdAt: row.created_at!,
       updatedAt: row.updated_at!,
     };
+  }
+
+  private invalidatePublicCache(): void {
+    this.publicListCache.clear();
+    this.publicDetailCache.clear();
+  }
+
+  private static publicListCacheKey(query: PublicBlogQueryDto): string {
+    return JSON.stringify({
+      page: query.page,
+      limit: query.limit,
+      search: query.search ?? '',
+      category: query.category ?? '',
+    });
   }
 }

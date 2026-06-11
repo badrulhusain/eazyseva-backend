@@ -7,6 +7,9 @@ export declare class ServicesService {
     private readonly supabaseService;
     private readonly ordersService;
     private readonly logger;
+    private readonly publicListCache;
+    private readonly publicDetailCache;
+    private readonly PUBLIC_CACHE_TTL;
     constructor(supabaseService: SupabaseService, ordersService: OrdersService);
     findAll(category?: ServiceCategory): Promise<ServiceListItem[]>;
     findAllAdmin(): Promise<ServiceItem[]>;
@@ -17,4 +20,5 @@ export declare class ServicesService {
         deleted: boolean;
         id: string;
     }>;
+    private invalidatePublicCache;
 }

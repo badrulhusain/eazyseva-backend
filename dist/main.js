@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
+const compression_1 = __importDefault(require("compression"));
 const helmet_1 = __importDefault(require("helmet"));
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
@@ -17,20 +18,37 @@ async function bootstrap() {
         logger: ['error', 'warn', 'log'],
     });
     app.use((0, helmet_1.default)());
+    app.use((0, compression_1.default)());
     const allowedOrigins = (process.env.CLIENT_URLS ??
         process.env.CLIENT_URL ??
         'http://localhost:5173')
         .split(',')
         .map((o) => o.trim())
         .filter(Boolean);
+    app.use((request, response, next) => {
+        const origin = request.headers.origin;
+        if (!origin || allowedOrigins.includes(origin)) {
+            next();
+            return;
+        }
+        const rid = request.requestId ?? '-';
+        logger.warn(`CORS rejected origin: ${origin}`);
+        response.status(common_1.HttpStatus.FORBIDDEN).json({
+            success: false,
+            code: 'FORBIDDEN',
+            message: 'Origin is not allowed by CORS policy',
+            path: request.originalUrl,
+            timestamp: new Date().toISOString(),
+            requestId: rid,
+        });
+    });
     app.enableCors({
         origin: (origin, callback) => {
             if (!origin || allowedOrigins.includes(origin)) {
                 callback(null, true);
                 return;
             }
-            logger.warn(`CORS rejected origin: ${origin}`);
-            callback(new Error('Not allowed by CORS'));
+            callback(null, false);
         },
         credentials: true,
         methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],

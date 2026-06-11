@@ -20,11 +20,18 @@ let ServicesService = ServicesService_1 = class ServicesService {
     supabaseService;
     ordersService;
     logger = new common_1.Logger(ServicesService_1.name);
+    publicListCache = new Map();
+    publicDetailCache = new Map();
+    PUBLIC_CACHE_TTL = 30_000;
     constructor(supabaseService, ordersService) {
         this.supabaseService = supabaseService;
         this.ordersService = ordersService;
     }
     async findAll(category) {
+        const cacheKey = category ?? '__all__';
+        const cached = this.publicListCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now())
+            return cached.data;
         let query = this.supabaseService.admin
             .from('services')
             .select(LIST_COLUMNS)
@@ -40,7 +47,12 @@ let ServicesService = ServicesService_1 = class ServicesService {
                 code: 'DB_ERROR',
                 message: error.message,
             });
-        return data ?? [];
+        const services = (data ?? []);
+        this.publicListCache.set(cacheKey, {
+            data: services,
+            expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
+        });
+        return services;
     }
     async findAllAdmin() {
         const { data, error } = await this.supabaseService.admin
@@ -56,6 +68,9 @@ let ServicesService = ServicesService_1 = class ServicesService {
         return data ?? [];
     }
     async findBySlug(slug) {
+        const cached = this.publicDetailCache.get(slug);
+        if (cached && cached.expiresAt > Date.now())
+            return cached.data;
         const { data, error } = await this.supabaseService.admin
             .from('services')
             .select(DETAIL_COLUMNS)
@@ -68,7 +83,12 @@ let ServicesService = ServicesService_1 = class ServicesService {
                 message: 'Service not found',
             });
         }
-        return data;
+        const service = data;
+        this.publicDetailCache.set(slug, {
+            data: service,
+            expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
+        });
+        return service;
     }
     async create(dto) {
         const { data: existing } = await this.supabaseService.admin
@@ -108,7 +128,8 @@ let ServicesService = ServicesService_1 = class ServicesService {
             });
         }
         this.logger.log(`Service created: ${data.id} slug=${dto.slug}`);
-        this.ordersService.invalidateServiceCache(dto.slug);
+        this.invalidatePublicCache();
+        this.ordersService.invalidateServiceCache();
         return data;
     }
     async update(id, dto) {
@@ -166,8 +187,8 @@ let ServicesService = ServicesService_1 = class ServicesService {
             });
         }
         this.logger.log(`Service updated: ${id}`);
-        if (dto.slug)
-            this.ordersService.invalidateServiceCache(dto.slug);
+        this.invalidatePublicCache();
+        this.ordersService.invalidateServiceCache();
         return data;
     }
     async softDelete(id) {
@@ -184,8 +205,13 @@ let ServicesService = ServicesService_1 = class ServicesService {
             });
         }
         this.logger.log(`Service soft-deleted: ${id}`);
+        this.invalidatePublicCache();
         this.ordersService.invalidateServiceCache();
         return { deleted: true, id };
+    }
+    invalidatePublicCache() {
+        this.publicListCache.clear();
+        this.publicDetailCache.clear();
     }
 };
 exports.ServicesService = ServicesService;
