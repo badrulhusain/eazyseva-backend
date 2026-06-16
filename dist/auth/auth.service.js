@@ -14,12 +14,24 @@ exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const jwt_1 = require("@nestjs/jwt");
+const crypto_1 = require("crypto");
 const supabase_service_1 = require("../supabase/supabase.service");
+const JWKS_CACHE_TTL_MS = 10 * 60_000;
+const JWKS_FETCH_TIMEOUT_MS = 5_000;
+const ASYMMETRIC_JWT_ALGORITHMS = [
+    'RS256',
+    'RS384',
+    'RS512',
+    'ES256',
+    'ES384',
+    'ES512',
+];
 let AuthService = AuthService_1 = class AuthService {
     supabaseService;
     jwtService;
     configService;
     logger = new common_1.Logger(AuthService_1.name);
+    jwksCache = null;
     constructor(supabaseService, jwtService, configService) {
         this.supabaseService = supabaseService;
         this.jwtService = jwtService;
@@ -109,35 +121,102 @@ let AuthService = AuthService_1 = class AuthService {
         if (cached && cached.expiresAt > Date.now()) {
             return cached.user;
         }
-        let payload;
         try {
-            payload =
-                await this.jwtService.verifyAsync(token, {
-                    secret: this.configService.getOrThrow('SUPABASE_JWT_SECRET'),
-                    algorithms: ['HS256'],
+            const payload = await this.verifySupabaseAccessToken(token);
+            if (!payload.sub) {
+                this.tokenCache.delete(token);
+                throw new common_1.UnauthorizedException({
+                    code: 'UNAUTHORIZED',
+                    message: 'Login required',
                 });
+            }
+            const user = await this.resolveCurrentUser({
+                id: payload.sub,
+                email: payload.email,
+                user_metadata: payload.user_metadata ?? {},
+            });
+            this.cacheToken(token, user);
+            return user;
         }
-        catch {
+        catch (error) {
             this.tokenCache.delete(token);
+            if (error instanceof common_1.UnauthorizedException)
+                throw error;
             throw new common_1.UnauthorizedException({
                 code: 'UNAUTHORIZED',
                 message: 'Login required',
             });
         }
-        if (!payload.sub) {
-            this.tokenCache.delete(token);
-            throw new common_1.UnauthorizedException({
-                code: 'UNAUTHORIZED',
-                message: 'Login required',
-            });
-        }
-        const user = await this.resolveCurrentUser({
-            id: payload.sub,
-            email: payload.email,
-            user_metadata: payload.user_metadata ?? {},
+    }
+    async verifySupabaseAccessToken(token) {
+        const decoded = this.jwtService.decode(token, {
+            complete: true,
         });
-        this.cacheToken(token, user);
-        return user;
+        if (!decoded || typeof decoded.payload === 'string') {
+            throw new common_1.UnauthorizedException({
+                code: 'UNAUTHORIZED',
+                message: 'Login required',
+            });
+        }
+        const alg = decoded.header.alg;
+        if (alg === 'HS256') {
+            return this.jwtService.verifyAsync(token, {
+                secret: this.configService.getOrThrow('SUPABASE_JWT_SECRET'),
+                algorithms: ['HS256'],
+            });
+        }
+        if (!this.isSupportedAsymmetricAlgorithm(alg) || !decoded.header.kid) {
+            throw new common_1.UnauthorizedException({
+                code: 'UNAUTHORIZED',
+                message: 'Login required',
+            });
+        }
+        const key = await this.getJwksKey(decoded.header.kid, alg);
+        const publicKey = (0, crypto_1.createPublicKey)({
+            key: key,
+            format: 'jwk',
+        }).export({ format: 'pem', type: 'spki' });
+        return this.jwtService.verifyAsync(token, {
+            secret: publicKey,
+            algorithms: [alg],
+        });
+    }
+    isSupportedAsymmetricAlgorithm(alg) {
+        return ASYMMETRIC_JWT_ALGORITHMS.includes(alg);
+    }
+    async getJwksKey(kid, alg) {
+        const keys = await this.getJwksKeys();
+        const key = keys.find((candidate) => candidate.kid === kid);
+        if (!key || (key.alg && key.alg !== alg)) {
+            throw new common_1.UnauthorizedException({
+                code: 'UNAUTHORIZED',
+                message: 'Login required',
+            });
+        }
+        return key;
+    }
+    async getJwksKeys() {
+        if (this.jwksCache && this.jwksCache.expiresAt > Date.now()) {
+            return this.jwksCache.keys;
+        }
+        const supabaseUrl = this.configService.getOrThrow('SUPABASE_URL');
+        const jwksUrl = new URL('/auth/v1/.well-known/jwks.json', supabaseUrl).toString();
+        const response = await fetch(jwksUrl, {
+            signal: AbortSignal.timeout(JWKS_FETCH_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            throw new common_1.UnauthorizedException({
+                code: 'UNAUTHORIZED',
+                message: 'Login required',
+            });
+        }
+        const data = (await response.json());
+        const keys = Array.isArray(data.keys) ? data.keys : [];
+        this.jwksCache = {
+            keys,
+            expiresAt: Date.now() + JWKS_CACHE_TTL_MS,
+        };
+        return keys;
     }
     cacheToken(token, user) {
         if (this.tokenCache.size >= this.TOKEN_CACHE_MAX) {

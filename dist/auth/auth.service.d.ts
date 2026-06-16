@@ -10,6 +10,7 @@ export declare class AuthService {
     private readonly jwtService;
     private readonly configService;
     private readonly logger;
+    private jwksCache;
     constructor(supabaseService: SupabaseService, jwtService: JwtService, configService: ConfigService);
     private readonly tokenCache;
     private readonly TOKEN_CACHE_TTL;
@@ -37,6 +38,10 @@ export declare class AuthService {
         data: CurrentUser;
     };
     getUserFromAccessToken(token: string): Promise<CurrentUser>;
+    private verifySupabaseAccessToken;
+    private isSupportedAsymmetricAlgorithm;
+    private getJwksKey;
+    private getJwksKeys;
     private cacheToken;
     resolveCurrentUser(user: Pick<User, 'id' | 'email' | 'user_metadata'>): Promise<CurrentUser>;
 }

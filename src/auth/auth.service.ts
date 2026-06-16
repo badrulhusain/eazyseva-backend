@@ -8,6 +8,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { User } from '@supabase/supabase-js';
+import { createPublicKey, type JsonWebKey } from 'crypto';
+import type { Algorithm, Jwt } from 'jsonwebtoken';
 import { SupabaseService } from '../supabase/supabase.service';
 import type { CurrentUser } from '../common/types/current-user.type';
 import type { RegisterDto } from './dto/register.dto';
@@ -19,9 +21,30 @@ type SupabaseAccessTokenPayload = {
   user_metadata?: Record<string, unknown>;
 };
 
+type JwksKey = JsonWebKey & {
+  kid?: string;
+  alg?: string;
+};
+
+type JwksResponse = {
+  keys?: JwksKey[];
+};
+
+const JWKS_CACHE_TTL_MS = 10 * 60_000;
+const JWKS_FETCH_TIMEOUT_MS = 5_000;
+const ASYMMETRIC_JWT_ALGORITHMS = [
+  'RS256',
+  'RS384',
+  'RS512',
+  'ES256',
+  'ES384',
+  'ES512',
+] as const;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private jwksCache: { keys: JwksKey[]; expiresAt: number } | null = null;
 
   constructor(
     private readonly supabaseService: SupabaseService,
@@ -164,41 +187,131 @@ export class AuthService {
       return cached.user;
     }
 
-    let payload: SupabaseAccessTokenPayload;
     try {
-      payload = await this.jwtService.verifyAsync<SupabaseAccessTokenPayload>(
-        token,
-        {
-          secret: this.configService.getOrThrow<string>('SUPABASE_JWT_SECRET'),
-          algorithms: ['HS256'],
-        },
-      );
-    } catch {
+      const payload = await this.verifySupabaseAccessToken(token);
+
+      if (!payload.sub) {
+        this.tokenCache.delete(token);
+        throw new UnauthorizedException({
+          code: 'UNAUTHORIZED',
+          message: 'Login required',
+        });
+      }
+
+      const user = await this.resolveCurrentUser({
+        id: payload.sub,
+        email: payload.email,
+        user_metadata: payload.user_metadata ?? {},
+      });
+      this.cacheToken(token, user);
+      return user;
+    } catch (error) {
       this.tokenCache.delete(token);
+      if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException({
         code: 'UNAUTHORIZED',
         message: 'Login required',
       });
     }
-
-    if (!payload.sub) {
-      this.tokenCache.delete(token);
-      throw new UnauthorizedException({
-        code: 'UNAUTHORIZED',
-        message: 'Login required',
-      });
-    }
-
-    const user = await this.resolveCurrentUser({
-      id: payload.sub,
-      email: payload.email,
-      user_metadata: payload.user_metadata ?? {},
-    });
-    this.cacheToken(token, user);
-    return user;
   }
 
   // ── Internal helpers ───────────────────────────────────────────────────────
+
+  private async verifySupabaseAccessToken(
+    token: string,
+  ): Promise<SupabaseAccessTokenPayload> {
+    const decoded = this.jwtService.decode(token, {
+      complete: true,
+    }) as Jwt | null;
+
+    if (!decoded || typeof decoded.payload === 'string') {
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Login required',
+      });
+    }
+
+    const alg = decoded.header.alg;
+
+    if (alg === 'HS256') {
+      return this.jwtService.verifyAsync<SupabaseAccessTokenPayload>(token, {
+        secret: this.configService.getOrThrow<string>('SUPABASE_JWT_SECRET'),
+        algorithms: ['HS256'],
+      });
+    }
+
+    if (!this.isSupportedAsymmetricAlgorithm(alg) || !decoded.header.kid) {
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Login required',
+      });
+    }
+
+    const key = await this.getJwksKey(decoded.header.kid, alg);
+    const publicKey = createPublicKey({
+      key: key as JsonWebKey,
+      format: 'jwk',
+    }).export({ format: 'pem', type: 'spki' });
+
+    return this.jwtService.verifyAsync<SupabaseAccessTokenPayload>(token, {
+      secret: publicKey,
+      algorithms: [alg],
+    });
+  }
+
+  private isSupportedAsymmetricAlgorithm(
+    alg: string,
+  ): alg is (typeof ASYMMETRIC_JWT_ALGORITHMS)[number] {
+    return ASYMMETRIC_JWT_ALGORITHMS.includes(
+      alg as (typeof ASYMMETRIC_JWT_ALGORITHMS)[number],
+    );
+  }
+
+  private async getJwksKey(kid: string, alg: Algorithm): Promise<JwksKey> {
+    const keys = await this.getJwksKeys();
+    const key = keys.find((candidate) => candidate.kid === kid);
+
+    if (!key || (key.alg && key.alg !== alg)) {
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Login required',
+      });
+    }
+
+    return key;
+  }
+
+  private async getJwksKeys(): Promise<JwksKey[]> {
+    if (this.jwksCache && this.jwksCache.expiresAt > Date.now()) {
+      return this.jwksCache.keys;
+    }
+
+    const supabaseUrl = this.configService.getOrThrow<string>('SUPABASE_URL');
+    const jwksUrl = new URL(
+      '/auth/v1/.well-known/jwks.json',
+      supabaseUrl,
+    ).toString();
+
+    const response = await fetch(jwksUrl, {
+      signal: AbortSignal.timeout(JWKS_FETCH_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Login required',
+      });
+    }
+
+    const data = (await response.json()) as JwksResponse;
+    const keys = Array.isArray(data.keys) ? data.keys : [];
+    this.jwksCache = {
+      keys,
+      expiresAt: Date.now() + JWKS_CACHE_TTL_MS,
+    };
+
+    return keys;
+  }
 
   private cacheToken(token: string, user: CurrentUser): void {
     if (this.tokenCache.size >= this.TOKEN_CACHE_MAX) {

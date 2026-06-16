@@ -1,10 +1,13 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { generateKeyPairSync } from 'crypto';
 import { AuthService } from './auth.service';
 
 const jwtSecret = 'test-jwt-secret';
+const supabaseUrl = 'https://project-ref.supabase.co';
 
 function createService(
   options: {
+    alg?: string;
     payload?: Record<string, unknown>;
     verifyError?: Error;
     profile?: Record<string, unknown> | null;
@@ -32,6 +35,10 @@ function createService(
     },
   };
   const jwtService = {
+    decode: jest.fn().mockReturnValue({
+      header: { alg: options.alg ?? 'HS256' },
+      payload: {},
+    }),
     verifyAsync: jest.fn().mockImplementation(async () => {
       if (options.verifyError) throw options.verifyError;
       return (
@@ -44,7 +51,9 @@ function createService(
     }),
   };
   const configService = {
-    getOrThrow: jest.fn().mockReturnValue(jwtSecret),
+    getOrThrow: jest.fn((key: string) =>
+      key === 'SUPABASE_URL' ? supabaseUrl : jwtSecret,
+    ),
   };
 
   return {
@@ -89,6 +98,9 @@ describe('AuthService', () => {
         secret: jwtSecret,
         algorithms: ['HS256'],
       });
+      expect(jwtService.decode).toHaveBeenCalledWith('token-1', {
+        complete: true,
+      });
       expect(configService.getOrThrow).toHaveBeenCalledWith(
         'SUPABASE_JWT_SECRET',
       );
@@ -115,6 +127,50 @@ describe('AuthService', () => {
         service.getUserFromAccessToken('missing-sub'),
       ).rejects.toBeInstanceOf(UnauthorizedException);
       expect(from).not.toHaveBeenCalled();
+    });
+
+    it('verifies asymmetric JWTs with the Supabase JWKS endpoint', async () => {
+      const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const jwk = publicKey.export({ format: 'jwk' });
+      const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          keys: [{ ...jwk, kid: 'key-1', alg: 'RS256' }],
+        }),
+      } as Response);
+      const { service, jwtService } = createService({
+        alg: 'RS256',
+        profile: {
+          id: 'user-1',
+          email: 'user@example.com',
+          role: 'USER',
+          full_name: 'User One',
+          phone: '9999999999',
+        },
+      });
+      jwtService.decode.mockReturnValueOnce({
+        header: { alg: 'RS256', kid: 'key-1' },
+        payload: {},
+      });
+
+      await expect(service.getUserFromAccessToken('rs-token')).resolves.toEqual(
+        {
+          id: 'user-1',
+          email: 'user@example.com',
+          role: 'USER',
+          full_name: 'User One',
+          phone: '9999999999',
+        },
+      );
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(jwtService.verifyAsync).toHaveBeenCalledWith(
+        'rs-token',
+        expect.objectContaining({ algorithms: ['RS256'] }),
+      );
+      fetchSpy.mockRestore();
     });
   });
 
