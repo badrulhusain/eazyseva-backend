@@ -5,17 +5,29 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import type { User } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service';
 import type { CurrentUser } from '../common/types/current-user.type';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 
+type SupabaseAccessTokenPayload = {
+  sub?: string;
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+};
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+  ) {}
 
   // ── In-process token cache ─────────────────────────────────────────────────
   //
@@ -140,18 +152,11 @@ export class AuthService {
   /**
    * Resolves a CurrentUser from a bearer token.
    *
-   * Fast path: cache hit → zero network calls (valid for TOKEN_CACHE_TTL ms).
-   * Slow path: validate token via Supabase Auth (1 RTT), then fetch profile
-   *            from DB (1 RTT), then cache the result.
-   *
-   * Why supabase.auth.getUser() instead of local JWT.verify()?
-   * JwtModule.register({ secret }) reads process.env at module decoration time,
-   * which can be undefined in some NestJS bootstrap sequences before ConfigModule
-   * fully initialises, causing every verify() call to throw and returning 401 for
-   * all authenticated requests. supabase.auth.getUser() is a network call but is
-   * always correct. The cache already eliminates the RTT for 99% of requests
-   * (those within the 60 s window). Local verification can be revisited once we
-   * switch to JwtModule.registerAsync() with ConfigService.
+   * Fast path: cache hit -> zero work (valid for TOKEN_CACHE_TTL ms).
+   * Slow path: validate token locally, fetch profile from DB, then cache.
+   * Local verification keeps session restore independent from Supabase Auth
+   * network latency, which otherwise can make the frontend's restore request
+   * hit its 15-second timeout.
    */
   async getUserFromAccessToken(token: string): Promise<CurrentUser> {
     const cached = this.tokenCache.get(token);
@@ -159,10 +164,16 @@ export class AuthService {
       return cached.user;
     }
 
-    const { data, error } =
-      await this.supabaseService.supabase.auth.getUser(token);
-
-    if (error || !data.user) {
+    let payload: SupabaseAccessTokenPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<SupabaseAccessTokenPayload>(
+        token,
+        {
+          secret: this.configService.getOrThrow<string>('SUPABASE_JWT_SECRET'),
+          algorithms: ['HS256'],
+        },
+      );
+    } catch {
       this.tokenCache.delete(token);
       throw new UnauthorizedException({
         code: 'UNAUTHORIZED',
@@ -170,7 +181,19 @@ export class AuthService {
       });
     }
 
-    const user = await this.resolveCurrentUser(data.user);
+    if (!payload.sub) {
+      this.tokenCache.delete(token);
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Login required',
+      });
+    }
+
+    const user = await this.resolveCurrentUser({
+      id: payload.sub,
+      email: payload.email,
+      user_metadata: payload.user_metadata ?? {},
+    });
     this.cacheToken(token, user);
     return user;
   }
@@ -243,16 +266,28 @@ export class AuthService {
       phone: (user.user_metadata?.phone as string | undefined) ?? null,
     };
 
-    await this.supabaseService.admin.from('profiles').upsert(
-      {
-        id: fallbackUser.id,
-        email: fallbackUser.email,
-        role: fallbackUser.role,
-        full_name: fallbackUser.full_name,
-        phone: fallbackUser.phone,
-      },
-      { onConflict: 'id' },
-    );
+    const { error: upsertError } = await this.supabaseService.admin
+      .from('profiles')
+      .upsert(
+        {
+          id: fallbackUser.id,
+          email: fallbackUser.email,
+          role: fallbackUser.role,
+          full_name: fallbackUser.full_name,
+          phone: fallbackUser.phone,
+        },
+        { onConflict: 'id' },
+      );
+
+    if (upsertError) {
+      this.logger.error(
+        `Failed to repair missing profile for user=${fallbackUser.id}: ${upsertError.message}`,
+      );
+      throw new UnauthorizedException({
+        code: 'PROFILE_LOOKUP_FAILED',
+        message: 'Unable to load user profile',
+      });
+    }
 
     return fallbackUser;
   }

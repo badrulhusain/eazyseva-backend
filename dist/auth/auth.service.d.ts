@@ -1,3 +1,5 @@
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import type { User } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service';
 import type { CurrentUser } from '../common/types/current-user.type';
@@ -5,8 +7,10 @@ import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 export declare class AuthService {
     private readonly supabaseService;
+    private readonly jwtService;
+    private readonly configService;
     private readonly logger;
-    constructor(supabaseService: SupabaseService);
+    constructor(supabaseService: SupabaseService, jwtService: JwtService, configService: ConfigService);
     private readonly tokenCache;
     private readonly TOKEN_CACHE_TTL;
     private readonly TOKEN_CACHE_MAX;

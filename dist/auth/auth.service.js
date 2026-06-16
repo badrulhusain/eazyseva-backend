@@ -12,12 +12,18 @@ var AuthService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
+const jwt_1 = require("@nestjs/jwt");
 const supabase_service_1 = require("../supabase/supabase.service");
 let AuthService = AuthService_1 = class AuthService {
     supabaseService;
+    jwtService;
+    configService;
     logger = new common_1.Logger(AuthService_1.name);
-    constructor(supabaseService) {
+    constructor(supabaseService, jwtService, configService) {
         this.supabaseService = supabaseService;
+        this.jwtService = jwtService;
+        this.configService = configService;
     }
     tokenCache = new Map();
     TOKEN_CACHE_TTL = 60_000;
@@ -103,15 +109,33 @@ let AuthService = AuthService_1 = class AuthService {
         if (cached && cached.expiresAt > Date.now()) {
             return cached.user;
         }
-        const { data, error } = await this.supabaseService.supabase.auth.getUser(token);
-        if (error || !data.user) {
+        let payload;
+        try {
+            payload =
+                await this.jwtService.verifyAsync(token, {
+                    secret: this.configService.getOrThrow('SUPABASE_JWT_SECRET'),
+                    algorithms: ['HS256'],
+                });
+        }
+        catch {
             this.tokenCache.delete(token);
             throw new common_1.UnauthorizedException({
                 code: 'UNAUTHORIZED',
                 message: 'Login required',
             });
         }
-        const user = await this.resolveCurrentUser(data.user);
+        if (!payload.sub) {
+            this.tokenCache.delete(token);
+            throw new common_1.UnauthorizedException({
+                code: 'UNAUTHORIZED',
+                message: 'Login required',
+            });
+        }
+        const user = await this.resolveCurrentUser({
+            id: payload.sub,
+            email: payload.email,
+            user_metadata: payload.user_metadata ?? {},
+        });
         this.cacheToken(token, user);
         return user;
     }
@@ -164,19 +188,30 @@ let AuthService = AuthService_1 = class AuthService {
             full_name: user.user_metadata?.full_name ?? null,
             phone: user.user_metadata?.phone ?? null,
         };
-        await this.supabaseService.admin.from('profiles').upsert({
+        const { error: upsertError } = await this.supabaseService.admin
+            .from('profiles')
+            .upsert({
             id: fallbackUser.id,
             email: fallbackUser.email,
             role: fallbackUser.role,
             full_name: fallbackUser.full_name,
             phone: fallbackUser.phone,
         }, { onConflict: 'id' });
+        if (upsertError) {
+            this.logger.error(`Failed to repair missing profile for user=${fallbackUser.id}: ${upsertError.message}`);
+            throw new common_1.UnauthorizedException({
+                code: 'PROFILE_LOOKUP_FAILED',
+                message: 'Unable to load user profile',
+            });
+        }
         return fallbackUser;
     }
 };
 exports.AuthService = AuthService;
 exports.AuthService = AuthService = AuthService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [supabase_service_1.SupabaseService])
+    __metadata("design:paramtypes", [supabase_service_1.SupabaseService,
+        jwt_1.JwtService,
+        config_1.ConfigService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map
