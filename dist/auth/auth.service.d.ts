@@ -42,6 +42,10 @@ export declare class AuthService {
     private isSupportedAsymmetricAlgorithm;
     private getJwksKey;
     private getJwksKeys;
+    private getUserFromSupabaseAuth;
+    private extractEmail;
+    private extractUserMetadata;
+    private readString;
     private cacheToken;
     resolveCurrentUser(user: Pick<User, 'id' | 'email' | 'user_metadata'>): Promise<CurrentUser>;
 }

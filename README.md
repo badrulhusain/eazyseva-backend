@@ -97,6 +97,7 @@ SQL migrations live in `supabase/migrations/`. Run them in order in the Supabase
 | `20260528000000_phase2_orders.sql` | Orders table, `next_order_number()` sequence RPC |
 | `20260601000000_phase3_virtual_payments.sql` | Demo payment columns + `PAYMENT_PENDING` enum value |
 | `20260606000000_phase5_indexes.sql` | Performance indexes (run after existing data is loaded) |
+| `20260617000000_auth_profile_oauth_hardening.sql` | Hardens profile creation for OAuth users |
 
 ---
 

@@ -19,6 +19,9 @@ type SupabaseAccessTokenPayload = {
   sub?: string;
   email?: string;
   user_metadata?: Record<string, unknown>;
+  user_name?: string;
+  name?: string;
+  phone?: string;
 };
 
 type JwksKey = JsonWebKey & {
@@ -187,9 +190,23 @@ export class AuthService {
       return cached.user;
     }
 
-    try {
-      const payload = await this.verifySupabaseAccessToken(token);
+    let payload: SupabaseAccessTokenPayload;
 
+    try {
+      payload = await this.verifySupabaseAccessToken(token);
+    } catch (error) {
+      this.logger.warn(
+        `Local JWT verification failed; falling back to Supabase Auth: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+      const user = await this.getUserFromSupabaseAuth(token);
+      const currentUser = await this.resolveCurrentUser(user);
+      this.cacheToken(token, currentUser);
+      return currentUser;
+    }
+
+    try {
       if (!payload.sub) {
         this.tokenCache.delete(token);
         throw new UnauthorizedException({
@@ -200,8 +217,8 @@ export class AuthService {
 
       const user = await this.resolveCurrentUser({
         id: payload.sub,
-        email: payload.email,
-        user_metadata: payload.user_metadata ?? {},
+        email: this.extractEmail(payload),
+        user_metadata: this.extractUserMetadata(payload),
       });
       this.cacheToken(token, user);
       return user;
@@ -313,6 +330,52 @@ export class AuthService {
     return keys;
   }
 
+  private async getUserFromSupabaseAuth(token: string): Promise<User> {
+    const { data, error } =
+      await this.supabaseService.supabase.auth.getUser(token);
+
+    if (error || !data.user) {
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Login required',
+      });
+    }
+
+    return data.user;
+  }
+
+  private extractEmail(payload: SupabaseAccessTokenPayload): string {
+    return (
+      payload.email ??
+      this.readString(payload.user_metadata, 'email') ??
+      this.readString(payload.user_metadata, 'email_address') ??
+      ''
+    );
+  }
+
+  private extractUserMetadata(
+    payload: SupabaseAccessTokenPayload,
+  ): Record<string, unknown> {
+    return {
+      ...(payload.user_metadata ?? {}),
+      full_name:
+        this.readString(payload.user_metadata, 'full_name') ??
+        this.readString(payload.user_metadata, 'name') ??
+        payload.name ??
+        payload.user_name,
+      phone: this.readString(payload.user_metadata, 'phone') ?? payload.phone,
+      email: this.extractEmail(payload),
+    };
+  }
+
+  private readString(
+    data: Record<string, unknown> | undefined,
+    key: string,
+  ): string | undefined {
+    const value = data?.[key];
+    return typeof value === 'string' && value.trim() ? value : undefined;
+  }
+
   private cacheToken(token: string, user: CurrentUser): void {
     if (this.tokenCache.size >= this.TOKEN_CACHE_MAX) {
       const now = Date.now();
@@ -375,8 +438,11 @@ export class AuthService {
       id: user.id,
       email: user.email ?? '',
       role: 'USER',
-      full_name: (user.user_metadata?.full_name as string | undefined) ?? null,
-      phone: (user.user_metadata?.phone as string | undefined) ?? null,
+      full_name:
+        this.readString(user.user_metadata, 'full_name') ??
+        this.readString(user.user_metadata, 'name') ??
+        null,
+      phone: this.readString(user.user_metadata, 'phone') ?? null,
     };
 
     const { error: upsertError } = await this.supabaseService.admin

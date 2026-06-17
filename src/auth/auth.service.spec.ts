@@ -10,6 +10,8 @@ function createService(
     alg?: string;
     payload?: Record<string, unknown>;
     verifyError?: Error;
+    getUserResult?: Record<string, unknown>;
+    getUserError?: Record<string, unknown> | null;
     profile?: Record<string, unknown> | null;
     profileError?: Record<string, unknown> | null;
     upsertError?: Record<string, unknown> | null;
@@ -30,7 +32,13 @@ function createService(
     admin: { from },
     supabase: {
       auth: {
-        getUser: jest.fn(),
+        getUser: jest.fn().mockResolvedValue({
+          data: { user: options.getUserResult ?? null },
+          error:
+            'getUserError' in options
+              ? options.getUserError
+              : { message: 'bad token' },
+        }),
       },
     },
   };
@@ -107,8 +115,38 @@ describe('AuthService', () => {
       expect(supabaseService.supabase.auth.getUser).not.toHaveBeenCalled();
     });
 
-    it('rejects invalid JWTs before profile lookup', async () => {
-      const { service, from } = createService({
+    it('falls back to Supabase Auth when local JWT verification fails', async () => {
+      const { service, supabaseService } = createService({
+        verifyError: new Error('bad token'),
+        getUserResult: {
+          id: 'user-1',
+          email: 'user@example.com',
+          user_metadata: { name: 'Google User' },
+        },
+        getUserError: null,
+        profile: {
+          id: 'user-1',
+          email: 'user@example.com',
+          role: 'USER',
+          full_name: 'Google User',
+          phone: null,
+        },
+      });
+
+      await expect(service.getUserFromAccessToken('token-1')).resolves.toEqual({
+        id: 'user-1',
+        email: 'user@example.com',
+        role: 'USER',
+        full_name: 'Google User',
+        phone: null,
+      });
+      expect(supabaseService.supabase.auth.getUser).toHaveBeenCalledWith(
+        'token-1',
+      );
+    });
+
+    it('rejects invalid JWTs when local and Supabase Auth verification both fail', async () => {
+      const { service, from, supabaseService } = createService({
         verifyError: new Error('bad token'),
       });
 
@@ -116,6 +154,9 @@ describe('AuthService', () => {
         service.getUserFromAccessToken('bad-token'),
       ).rejects.toBeInstanceOf(UnauthorizedException);
       expect(from).not.toHaveBeenCalled();
+      expect(supabaseService.supabase.auth.getUser).toHaveBeenCalledWith(
+        'bad-token',
+      );
     });
 
     it('rejects JWTs without a subject claim', async () => {
@@ -200,6 +241,36 @@ describe('AuthService', () => {
           role: 'USER',
           full_name: 'User One',
           phone: '9999999999',
+        },
+        { onConflict: 'id' },
+      );
+    });
+
+    it('uses Google OAuth metadata when repairing a missing profile', async () => {
+      const { service, upsert } = createService({
+        profileError: { code: 'PGRST116', message: 'No rows' },
+      });
+
+      await expect(
+        service.resolveCurrentUser({
+          id: 'user-1',
+          email: 'user@example.com',
+          user_metadata: { name: 'Google User' },
+        } as any),
+      ).resolves.toEqual({
+        id: 'user-1',
+        email: 'user@example.com',
+        role: 'USER',
+        full_name: 'Google User',
+        phone: null,
+      });
+      expect(upsert).toHaveBeenCalledWith(
+        {
+          id: 'user-1',
+          email: 'user@example.com',
+          role: 'USER',
+          full_name: 'Google User',
+          phone: null,
         },
         { onConflict: 'id' },
       );
