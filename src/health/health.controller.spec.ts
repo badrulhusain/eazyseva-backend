@@ -15,10 +15,9 @@ describe('HealthController', () => {
     jest.clearAllMocks();
   });
 
-  describe('GET /health (liveness)', () => {
-    it('returns success=true with uptime and timestamp', () => {
+  describe('GET /api/v1/health (liveness)', () => {
+    it('returns status=ok with uptime and timestamp', () => {
       const result = controller.liveness();
-      expect(result.success).toBe(true);
       expect(result.status).toBe('ok');
       expect(typeof result.uptime).toBe('number');
       expect(typeof result.timestamp).toBe('string');
@@ -30,7 +29,7 @@ describe('HealthController', () => {
     });
   });
 
-  describe('GET /health/db (readiness)', () => {
+  describe('GET /api/v1/health/db (readiness)', () => {
     it('returns success=true when Supabase read succeeds', async () => {
       const limit = jest.fn().mockResolvedValueOnce({ error: null });
       mockSupabaseService.admin.from.mockReturnValueOnce({

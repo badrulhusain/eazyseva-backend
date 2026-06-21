@@ -78,19 +78,66 @@ npm run start:prod       # runs dist/main.js
 
 ## Docker
 
-The image does not bake in `.env`; pass runtime secrets through your platform
-or `--env-file`.
+The production image uses a multi-stage Node 20 build. Development dependencies,
+source files, `.env`, and local `node_modules` are not copied into the runtime
+image.
+
+### Build the image
 
 ```bash
-docker build -t ezyseva-server .
-docker run --env-file .env -p 3000:3000 ezyseva-server
+docker build -t eazyseva-backend .
 ```
 
-Container health checks use the unprefixed liveness route:
+### Run with runtime environment variables
+
+Keep secrets in the local `.env` file or configure them in the deployment
+platform. The `.env` file is excluded from the Docker build context.
 
 ```bash
-curl http://localhost:3000/health
+docker run --env-file .env -p 3000:3000 eazyseva-backend
 ```
+
+The API is available at `http://localhost:3000/api/v1`.
+
+### Run with Docker Compose
+
+```bash
+docker compose up --build
+docker compose down
+```
+
+Compose loads runtime variables from `.env` and restarts the backend unless it
+is explicitly stopped.
+
+### Test the health endpoint
+
+```bash
+curl http://localhost:3000/api/v1/health
+```
+
+Expected response:
+
+```json
+{
+  "status": "ok",
+  "uptime": 12.345,
+  "timestamp": "2026-06-21T12:00:00.000Z"
+}
+```
+
+### Docker troubleshooting
+
+- `Missing required environment variables`: create `.env` from `.env.example`
+  and provide all Supabase and Cloudinary values.
+- Port `3000` already in use: stop the conflicting process or map another host
+  port, for example `-p 3001:3000`.
+- Health check reports `unhealthy`: inspect startup logs with
+  `docker logs <container-id>` and test
+  `http://localhost:3000/api/v1/health`.
+- Rebuild after dependency changes with `docker compose up --build`.
+- Verify that secrets are runtime-only with
+  `docker run --rm --entrypoint sh eazyseva-backend -c "test ! -e /app/.env"`;
+  `.env` and `.env.*` are excluded by `.dockerignore`.
 
 ---
 
@@ -161,13 +208,13 @@ Files are held in RAM (`memoryStorage`) then streamed to Cloudinary. Max size co
 - [ ] Set all required env vars (see table above)
 - [ ] Set `NODE_ENV=production`
 - [ ] Set `CLIENT_URLS` to your production frontend domain(s)
-- [ ] Build command: `npm run build` or Docker build: `docker build -t ezyseva-server .`
+- [ ] Build command: `npm run build` or Docker build: `docker build -t eazyseva-backend .`
 - [ ] Start command: `npm run start:prod` or Docker run with `--env-file .env`
 - [ ] Run all SQL migrations in Supabase SQL Editor
 - [ ] Add Cloudinary credentials
 - [ ] Verify `SUPABASE_SERVICE_ROLE_KEY` is the **service-role** key, not anon key
 - [ ] Verify `SUPABASE_JWT_SECRET` matches the Supabase project JWT secret
-- [ ] Set up uptime monitor to `GET /health` or `GET /api/v1/health` every 10 minutes (prevents free-tier spin-down on Render)
+- [ ] Set up uptime monitor to `GET /api/v1/health` every 10 minutes (prevents free-tier spin-down on Render)
 - [ ] Enable Supabase Row Level Security (RLS) policies from migration SQL
 - [ ] Rotate any secrets that were committed to version control
 
@@ -176,7 +223,7 @@ Files are held in RAM (`memoryStorage`) then streamed to Cloudinary. Max size co
 ```
 Build Command: npm install && npm run build
 Start Command: npm run start:prod
-Health Check Path: /health
+Health Check Path: /api/v1/health
 ```
 
 ---
@@ -237,8 +284,7 @@ Swagger UI is available in development at `http://localhost:3000/api/docs` (disa
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/health` | Public | Container liveness probe |
-| GET | `/api/v1/health` | Public | Liveness probe |
+| GET | `/api/v1/health` | Public | Container liveness probe |
 | GET | `/api/v1/health/db` | Public | Readiness probe (DB connectivity) |
 
 ---

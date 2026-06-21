@@ -14,17 +14,6 @@ const express_1 = require("express");
 const app_module_1 = require("./app.module");
 const http_exception_filter_1 = require("./common/filters/http-exception.filter");
 const logger = new common_1.Logger('Bootstrap');
-function healthPayload() {
-    return {
-        success: true,
-        status: 'ok',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-    };
-}
-function livenessHandler(_request, response) {
-    response.status(common_1.HttpStatus.OK).json(healthPayload());
-}
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, {
         logger: ['error', 'warn', 'log'],
@@ -67,8 +56,6 @@ async function bootstrap() {
         allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
     });
     app.use((0, express_1.json)({ limit: '1mb' }));
-    const expressApp = app.getHttpAdapter().getInstance();
-    expressApp.get('/health', livenessHandler);
     app.setGlobalPrefix('api/v1');
     app.useGlobalPipes(new common_2.ValidationPipe({
         whitelist: true,

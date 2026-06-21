@@ -1,0 +1,20 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eazyseva-backend
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+# Future-ready Redis example. Uncomment only when the application uses Redis.
+#  redis:
+#    image: redis:7-alpine
+#    restart: unless-stopped
+#    ports:
+#      - "6379:6379"

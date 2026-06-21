@@ -19,7 +19,6 @@ export class HealthController {
   @Get()
   liveness() {
     return {
-      success: true,
       status: 'ok',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
