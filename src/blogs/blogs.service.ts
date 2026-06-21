@@ -216,8 +216,8 @@ export class BlogsService {
     }
 
     return {
-      data: ((data ?? []) as unknown as Partial<BlogRow>[]).map(
-        BlogsService.formatSummaryRow,
+      data: ((data ?? []) as unknown as Partial<BlogRow>[]).map((row) =>
+        BlogsService.formatSummaryRow(row),
       ),
       total: count ?? 0,
       page,
@@ -290,8 +290,8 @@ export class BlogsService {
     }
 
     const result = {
-      data: ((data ?? []) as unknown as Partial<BlogRow>[]).map(
-        BlogsService.formatSummaryRow,
+      data: ((data ?? []) as unknown as Partial<BlogRow>[]).map((row) =>
+        BlogsService.formatSummaryRow(row),
       ),
       total: count ?? 0,
       page,

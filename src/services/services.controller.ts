@@ -7,14 +7,15 @@ import {
   Patch,
   Post,
   Query,
+  ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
 import { Public } from '../auth/decorators/public.decorator';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
+import { ServiceQueryDto } from './dto/query-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
-import type { ServiceCategory } from './services.types';
 
 @Public()
 @Controller('services')
@@ -22,9 +23,9 @@ export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
   @Get()
-  async findAll(@Query('category') category?: ServiceCategory) {
-    const data = await this.servicesService.findAll(category);
-    return { success: true, data };
+  async findAll(@Query() query: ServiceQueryDto) {
+    const result = await this.servicesService.findAll(query);
+    return { success: true, ...result };
   }
 
   @Get(':slug')
@@ -40,8 +41,14 @@ export class AdminServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
   @Get()
-  async findAll() {
-    const data = await this.servicesService.findAllAdmin();
+  async findAll(@Query() query: ServiceQueryDto) {
+    const result = await this.servicesService.findAllAdmin(query);
+    return { success: true, ...result };
+  }
+
+  @Get(':id')
+  async findById(@Param('id', ParseUUIDPipe) id: string) {
+    const data = await this.servicesService.findById(id);
     return { success: true, data };
   }
 

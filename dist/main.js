@@ -10,9 +10,21 @@ const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const common_2 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
+const express_1 = require("express");
 const app_module_1 = require("./app.module");
 const http_exception_filter_1 = require("./common/filters/http-exception.filter");
 const logger = new common_1.Logger('Bootstrap');
+function healthPayload() {
+    return {
+        success: true,
+        status: 'ok',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+    };
+}
+function livenessHandler(_request, response) {
+    response.status(common_1.HttpStatus.OK).json(healthPayload());
+}
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, {
         logger: ['error', 'warn', 'log'],
@@ -54,7 +66,9 @@ async function bootstrap() {
         methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
     });
-    app.use(require('express').json({ limit: '1mb' }));
+    app.use((0, express_1.json)({ limit: '1mb' }));
+    const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.get('/health', livenessHandler);
     app.setGlobalPrefix('api/v1');
     app.useGlobalPipes(new common_2.ValidationPipe({
         whitelist: true,
@@ -78,5 +92,5 @@ async function bootstrap() {
     logger.log(`Server listening on port ${port} [${process.env.NODE_ENV ?? 'development'}]`);
     app.enableShutdownHooks();
 }
-bootstrap();
+void bootstrap();
 //# sourceMappingURL=main.js.map

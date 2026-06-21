@@ -7,12 +7,9 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { OrdersService } from '../orders/orders.service';
-import type {
-  ServiceCategory,
-  ServiceListItem,
-  ServiceItem,
-} from './services.types';
+import type { ServiceListItem, ServiceItem } from './services.types';
 import type { CreateServiceDto } from './dto/create-service.dto';
+import type { ServiceQueryDto } from './dto/query-service.dto';
 import type { UpdateServiceDto } from './dto/update-service.dto';
 
 const LIST_COLUMNS =
@@ -21,12 +18,19 @@ const LIST_COLUMNS =
 const DETAIL_COLUMNS =
   'id, title, slug, description, category, price, govt_fee, processing_fee, delivery_days_min, delivery_days_max, required_documents, icon, is_popular, is_active, created_at, updated_at' as const;
 
+interface PaginatedServices<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 @Injectable()
 export class ServicesService {
   private readonly logger = new Logger(ServicesService.name);
   private readonly publicListCache = new Map<
     string,
-    { data: ServiceListItem[]; expiresAt: number }
+    { data: PaginatedServices<ServiceListItem>; expiresAt: number }
   >();
   private readonly publicDetailCache = new Map<
     string,
@@ -39,49 +43,86 @@ export class ServicesService {
     private readonly ordersService: OrdersService,
   ) {}
 
-  async findAll(category?: ServiceCategory): Promise<ServiceListItem[]> {
-    const cacheKey = category ?? '__all__';
+  async findAll(
+    query: ServiceQueryDto,
+  ): Promise<PaginatedServices<ServiceListItem>> {
+    const { page, limit, category, search } = query;
+    const cacheKey = ServicesService.publicListCacheKey(query);
     const cached = this.publicListCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.data;
 
-    let query = this.supabaseService.admin
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let dbQuery = this.supabaseService.admin
       .from('services')
-      .select(LIST_COLUMNS)
+      .select(LIST_COLUMNS, { count: 'planned' })
       .eq('is_active', true)
       .order('is_popular', { ascending: false })
-      .order('title', { ascending: true });
+      .order('title', { ascending: true })
+      .range(from, to);
 
     if (category) {
-      query = query.eq('category', category);
+      dbQuery = dbQuery.eq('category', category);
     }
 
-    const { data, error } = await query;
+    if (search?.trim()) {
+      dbQuery = dbQuery.ilike('title', `%${search.trim()}%`);
+    }
+
+    const { data, error, count } = await dbQuery;
     if (error)
       throw new InternalServerErrorException({
         code: 'DB_ERROR',
         message: error.message,
       });
-    const services = (data ?? []) as ServiceListItem[];
+    const result = {
+      data: (data ?? []) as ServiceListItem[],
+      total: count ?? 0,
+      page,
+      limit,
+    };
     this.publicListCache.set(cacheKey, {
-      data: services,
+      data: result,
       expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
     });
-    return services;
+    return result;
   }
 
-  async findAllAdmin(): Promise<ServiceItem[]> {
-    const { data, error } = await this.supabaseService.admin
-      .from('services')
-      .select(DETAIL_COLUMNS)
-      .order('is_popular', { ascending: false })
-      .order('title', { ascending: true });
+  async findAllAdmin(
+    query: ServiceQueryDto,
+  ): Promise<PaginatedServices<ServiceItem>> {
+    const { page, limit, category, search } = query;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
+    let dbQuery = this.supabaseService.admin
+      .from('services')
+      .select(DETAIL_COLUMNS, { count: 'planned' })
+      .order('is_popular', { ascending: false })
+      .order('title', { ascending: true })
+      .range(from, to);
+
+    if (category) {
+      dbQuery = dbQuery.eq('category', category);
+    }
+
+    if (search?.trim()) {
+      dbQuery = dbQuery.ilike('title', `%${search.trim()}%`);
+    }
+
+    const { data, error, count } = await dbQuery;
     if (error)
       throw new InternalServerErrorException({
         code: 'DB_ERROR',
         message: error.message,
       });
-    return data ?? [];
+    return {
+      data: data ?? [],
+      total: count ?? 0,
+      page,
+      limit,
+    };
   }
 
   async findBySlug(slug: string): Promise<ServiceItem> {
@@ -101,7 +142,7 @@ export class ServicesService {
         message: 'Service not found',
       });
     }
-    const service = data as ServiceItem;
+    const service = data;
     this.publicDetailCache.set(slug, {
       data: service,
       expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
@@ -109,7 +150,24 @@ export class ServicesService {
     return service;
   }
 
-  async create(dto: CreateServiceDto) {
+  async findById(id: string): Promise<ServiceItem> {
+    const { data, error } = await this.supabaseService.admin
+      .from('services')
+      .select(DETAIL_COLUMNS)
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      throw new NotFoundException({
+        code: 'SERVICE_NOT_FOUND',
+        message: 'Service not found',
+      });
+    }
+
+    return data;
+  }
+
+  async create(dto: CreateServiceDto): Promise<ServiceItem> {
     const { data: existing } = await this.supabaseService.admin
       .from('services')
       .select('id')
@@ -140,7 +198,7 @@ export class ServicesService {
         is_popular: dto.isPopular ?? false,
         is_active: dto.isActive ?? true,
       })
-      .select()
+      .select(DETAIL_COLUMNS)
       .single();
 
     if (error || !data) {
@@ -155,7 +213,7 @@ export class ServicesService {
     return data;
   }
 
-  async update(id: string, dto: UpdateServiceDto) {
+  async update(id: string, dto: UpdateServiceDto): Promise<ServiceItem> {
     if (dto.slug) {
       const { data: existing } = await this.supabaseService.admin
         .from('services')
@@ -195,7 +253,7 @@ export class ServicesService {
       .from('services')
       .update(patch)
       .eq('id', id)
-      .select()
+      .select(DETAIL_COLUMNS)
       .single();
 
     if (error || !data) {
@@ -210,7 +268,7 @@ export class ServicesService {
     return data;
   }
 
-  async softDelete(id: string) {
+  async softDelete(id: string): Promise<{ deleted: true; id: string }> {
     const { data, error } = await this.supabaseService.admin
       .from('services')
       .update({ is_active: false })
@@ -233,5 +291,14 @@ export class ServicesService {
   private invalidatePublicCache(): void {
     this.publicListCache.clear();
     this.publicDetailCache.clear();
+  }
+
+  private static publicListCacheKey(query: ServiceQueryDto): string {
+    return JSON.stringify({
+      page: query.page,
+      limit: query.limit,
+      category: query.category ?? '',
+      search: query.search?.trim() ?? '',
+    });
   }
 }

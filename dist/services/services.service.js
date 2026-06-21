@@ -27,45 +27,73 @@ let ServicesService = ServicesService_1 = class ServicesService {
         this.supabaseService = supabaseService;
         this.ordersService = ordersService;
     }
-    async findAll(category) {
-        const cacheKey = category ?? '__all__';
+    async findAll(query) {
+        const { page, limit, category, search } = query;
+        const cacheKey = ServicesService_1.publicListCacheKey(query);
         const cached = this.publicListCache.get(cacheKey);
         if (cached && cached.expiresAt > Date.now())
             return cached.data;
-        let query = this.supabaseService.admin
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+        let dbQuery = this.supabaseService.admin
             .from('services')
-            .select(LIST_COLUMNS)
+            .select(LIST_COLUMNS, { count: 'planned' })
             .eq('is_active', true)
             .order('is_popular', { ascending: false })
-            .order('title', { ascending: true });
+            .order('title', { ascending: true })
+            .range(from, to);
         if (category) {
-            query = query.eq('category', category);
+            dbQuery = dbQuery.eq('category', category);
         }
-        const { data, error } = await query;
+        if (search?.trim()) {
+            dbQuery = dbQuery.ilike('title', `%${search.trim()}%`);
+        }
+        const { data, error, count } = await dbQuery;
         if (error)
             throw new common_1.InternalServerErrorException({
                 code: 'DB_ERROR',
                 message: error.message,
             });
-        const services = (data ?? []);
+        const result = {
+            data: (data ?? []),
+            total: count ?? 0,
+            page,
+            limit,
+        };
         this.publicListCache.set(cacheKey, {
-            data: services,
+            data: result,
             expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
         });
-        return services;
+        return result;
     }
-    async findAllAdmin() {
-        const { data, error } = await this.supabaseService.admin
+    async findAllAdmin(query) {
+        const { page, limit, category, search } = query;
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+        let dbQuery = this.supabaseService.admin
             .from('services')
-            .select(DETAIL_COLUMNS)
+            .select(DETAIL_COLUMNS, { count: 'planned' })
             .order('is_popular', { ascending: false })
-            .order('title', { ascending: true });
+            .order('title', { ascending: true })
+            .range(from, to);
+        if (category) {
+            dbQuery = dbQuery.eq('category', category);
+        }
+        if (search?.trim()) {
+            dbQuery = dbQuery.ilike('title', `%${search.trim()}%`);
+        }
+        const { data, error, count } = await dbQuery;
         if (error)
             throw new common_1.InternalServerErrorException({
                 code: 'DB_ERROR',
                 message: error.message,
             });
-        return data ?? [];
+        return {
+            data: data ?? [],
+            total: count ?? 0,
+            page,
+            limit,
+        };
     }
     async findBySlug(slug) {
         const cached = this.publicDetailCache.get(slug);
@@ -89,6 +117,20 @@ let ServicesService = ServicesService_1 = class ServicesService {
             expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
         });
         return service;
+    }
+    async findById(id) {
+        const { data, error } = await this.supabaseService.admin
+            .from('services')
+            .select(DETAIL_COLUMNS)
+            .eq('id', id)
+            .single();
+        if (error || !data) {
+            throw new common_1.NotFoundException({
+                code: 'SERVICE_NOT_FOUND',
+                message: 'Service not found',
+            });
+        }
+        return data;
     }
     async create(dto) {
         const { data: existing } = await this.supabaseService.admin
@@ -119,7 +161,7 @@ let ServicesService = ServicesService_1 = class ServicesService {
             is_popular: dto.isPopular ?? false,
             is_active: dto.isActive ?? true,
         })
-            .select()
+            .select(DETAIL_COLUMNS)
             .single();
         if (error || !data) {
             throw new common_1.InternalServerErrorException({
@@ -178,7 +220,7 @@ let ServicesService = ServicesService_1 = class ServicesService {
             .from('services')
             .update(patch)
             .eq('id', id)
-            .select()
+            .select(DETAIL_COLUMNS)
             .single();
         if (error || !data) {
             throw new common_1.NotFoundException({
@@ -212,6 +254,14 @@ let ServicesService = ServicesService_1 = class ServicesService {
     invalidatePublicCache() {
         this.publicListCache.clear();
         this.publicDetailCache.clear();
+    }
+    static publicListCacheKey(query) {
+        return JSON.stringify({
+            page: query.page,
+            limit: query.limit,
+            category: query.category ?? '',
+            search: query.search?.trim() ?? '',
+        });
     }
 };
 exports.ServicesService = ServicesService;

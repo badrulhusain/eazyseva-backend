@@ -32,9 +32,9 @@ let OrdersController = class OrdersController {
         const data = await this.ordersService.create(dto, user.id);
         return { success: true, data };
     }
-    async getMyOrders(user) {
-        const data = await this.ordersService.findMyOrders(user.id);
-        return { success: true, data };
+    async getMyOrders(user, query) {
+        const result = await this.ordersService.findMyOrders(user.id, query);
+        return { success: true, ...result };
     }
     async findOne(id, user) {
         const data = await this.ordersService.findOne(id, user.id);
@@ -55,8 +55,9 @@ __decorate([
 __decorate([
     (0, common_1.Get)('my-orders'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, pagination_dto_1.PaginationDto]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "getMyOrders", null);
 __decorate([

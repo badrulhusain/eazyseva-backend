@@ -40,9 +40,12 @@ export class OrdersController {
   }
 
   @Get('my-orders')
-  async getMyOrders(@CurrentUser() user: CurrentUserType) {
-    const data = await this.ordersService.findMyOrders(user.id);
-    return { success: true, data };
+  async getMyOrders(
+    @CurrentUser() user: CurrentUserType,
+    @Query() query: PaginationDto,
+  ) {
+    const result = await this.ordersService.findMyOrders(user.id, query);
+    return { success: true, ...result };
   }
 
   @Get(':id')

@@ -7,6 +7,12 @@ import type { RejectOrderDto } from './dto/reject-order.dto';
 import type { RequestCorrectionDto } from './dto/request-correction.dto';
 import type { AdminOrderSummary, Order } from './orders.types';
 import type { PaginationDto } from '../common/dto/pagination.dto';
+interface PaginatedOrders<T> {
+    data: T[];
+    total: number;
+    page: number;
+    limit: number;
+}
 export declare class OrdersService {
     private readonly supabaseService;
     private readonly auditLogsService;
@@ -16,7 +22,7 @@ export declare class OrdersService {
     private readonly servicesCache;
     private readonly SERVICES_CACHE_TTL;
     create(dto: CreateOrderDto, userId: string): Promise<Order>;
-    findMyOrders(userId: string): Promise<Order[]>;
+    findMyOrders(userId: string, pagination: PaginationDto): Promise<PaginatedOrders<Order>>;
     findOne(id: string, userId: string): Promise<Order>;
     findAll(pagination: PaginationDto): Promise<{
         data: AdminOrderSummary[];
@@ -37,3 +43,4 @@ export declare class OrdersService {
     private static formatRow;
     private static formatListRow;
 }
+export {};

@@ -86,14 +86,15 @@ let OrdersService = OrdersService_1 = class OrdersService {
         const serviceCharge = Number(service.processing_fee ?? 0);
         const documentHandling = 0;
         const total = Number(service.price) + governmentFee + serviceCharge + documentHandling;
-        const { data: orderNumber, error: seqError } = await this.supabaseService.admin.rpc('next_order_number');
+        const orderNumberResult = (await this.supabaseService.admin.rpc('next_order_number'));
+        const { data: orderNumber, error: seqError } = orderNumberResult;
         if (seqError || !orderNumber) {
             throw new common_1.InternalServerErrorException({
                 code: 'ORDER_NUMBER_FAILED',
                 message: 'Failed to generate order number',
             });
         }
-        const { data, error } = await this.supabaseService.admin
+        const insertResult = (await this.supabaseService.admin
             .from('orders')
             .insert({
             order_number: orderNumber,
@@ -112,7 +113,8 @@ let OrdersService = OrdersService_1 = class OrdersService {
             payment_status: 'NOT_PAID',
         })
             .select()
-            .single();
+            .single());
+        const { data, error } = insertResult;
         if (error || !data) {
             throw new common_1.InternalServerErrorException({
                 code: 'DB_ERROR',
@@ -128,19 +130,42 @@ let OrdersService = OrdersService_1 = class OrdersService {
         });
         return order;
     }
-    async findMyOrders(userId) {
-        const { data, error } = await this.supabaseService.admin
+    async findMyOrders(userId, pagination) {
+        const { page, limit, status, search, dateFrom, dateTo } = pagination;
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+        let query = this.supabaseService.admin
             .from('orders')
-            .select(ORDER_FULL_COLS)
+            .select(ORDER_FULL_COLS, { count: 'planned' })
             .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .range(from, to);
+        if (status) {
+            query = query.eq('status', status);
+        }
+        if (search?.trim()) {
+            const term = `%${search.trim()}%`;
+            query = query.or(`order_number.ilike.${term},customer_name.ilike.${term},customer_phone.ilike.${term}`);
+        }
+        if (dateFrom) {
+            query = query.gte('created_at', dateFrom);
+        }
+        if (dateTo) {
+            query = query.lte('created_at', dateTo);
+        }
+        const { data, error, count } = await query;
         if (error) {
             throw new common_1.InternalServerErrorException({
                 code: 'DB_ERROR',
                 message: error.message,
             });
         }
-        return (data ?? []).map(OrdersService_1.formatRow);
+        return {
+            data: (data ?? []).map((row) => OrdersService_1.formatRow(row)),
+            total: count ?? 0,
+            page,
+            limit,
+        };
     }
     async findOne(id, userId) {
         const { data, error } = await this.supabaseService.admin
@@ -200,7 +225,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
             });
         }
         return {
-            data: (data ?? []).map(OrdersService_1.formatListRow),
+            data: (data ?? []).map((row) => OrdersService_1.formatListRow(row)),
             total: count ?? 0,
             page,
             limit,

@@ -19,33 +19,14 @@ import { DocumentsModule } from './documents/documents.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
-
-function validateEnv(config: Record<string, unknown>) {
-  const required = [
-    'SUPABASE_URL',
-    'SUPABASE_ANON_KEY',
-    'SUPABASE_SERVICE_ROLE_KEY',
-    'SUPABASE_JWT_SECRET',
-    'CLOUDINARY_CLOUD_NAME',
-    'CLOUDINARY_API_KEY',
-    'CLOUDINARY_API_SECRET',
-  ];
-
-  const missing = required.filter((key) => !config[key]);
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${missing.join(', ')}`,
-    );
-  }
-
-  return config;
-}
+import { validateEnv } from './config/env.validation';
 
 @Module({
   imports: [
     // Config + startup env validation
     ConfigModule.forRoot({
       isGlobal: true,
+      cache: true,
       validate: validateEnv,
     }),
 

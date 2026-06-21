@@ -76,6 +76,22 @@ npm run build
 npm run start:prod       # runs dist/main.js
 ```
 
+## Docker
+
+The image does not bake in `.env`; pass runtime secrets through your platform
+or `--env-file`.
+
+```bash
+docker build -t ezyseva-server .
+docker run --env-file .env -p 3000:3000 ezyseva-server
+```
+
+Container health checks use the unprefixed liveness route:
+
+```bash
+curl http://localhost:3000/health
+```
+
 ---
 
 ## Tests
@@ -98,6 +114,7 @@ SQL migrations live in `supabase/migrations/`. Run them in order in the Supabase
 | `20260601000000_phase3_virtual_payments.sql` | Demo payment columns + `PAYMENT_PENDING` enum value |
 | `20260606000000_phase5_indexes.sql` | Performance indexes (run after existing data is loaded) |
 | `20260617000000_auth_profile_oauth_hardening.sql` | Hardens profile creation for OAuth users |
+| `20260617010000_pagination_and_search_indexes.sql` | Indexes for paginated service/order/blog search |
 
 ---
 
@@ -144,13 +161,13 @@ Files are held in RAM (`memoryStorage`) then streamed to Cloudinary. Max size co
 - [ ] Set all required env vars (see table above)
 - [ ] Set `NODE_ENV=production`
 - [ ] Set `CLIENT_URLS` to your production frontend domain(s)
-- [ ] Build command: `npm run build`
-- [ ] Start command: `npm run start:prod`
+- [ ] Build command: `npm run build` or Docker build: `docker build -t ezyseva-server .`
+- [ ] Start command: `npm run start:prod` or Docker run with `--env-file .env`
 - [ ] Run all SQL migrations in Supabase SQL Editor
 - [ ] Add Cloudinary credentials
 - [ ] Verify `SUPABASE_SERVICE_ROLE_KEY` is the **service-role** key, not anon key
 - [ ] Verify `SUPABASE_JWT_SECRET` matches the Supabase project JWT secret
-- [ ] Set up uptime monitor to `GET /api/v1/health` every 10 minutes (prevents free-tier spin-down on Render)
+- [ ] Set up uptime monitor to `GET /health` or `GET /api/v1/health` every 10 minutes (prevents free-tier spin-down on Render)
 - [ ] Enable Supabase Row Level Security (RLS) policies from migration SQL
 - [ ] Rotate any secrets that were committed to version control
 
@@ -159,7 +176,7 @@ Files are held in RAM (`memoryStorage`) then streamed to Cloudinary. Max size co
 ```
 Build Command: npm install && npm run build
 Start Command: npm run start:prod
-Health Check Path: /api/v1/health
+Health Check Path: /health
 ```
 
 ---
@@ -180,7 +197,7 @@ Swagger UI is available in development at `http://localhost:3000/api/docs` (disa
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/v1/services` | Public | List active services |
+| GET | `/api/v1/services?page=1&limit=20&category=ID_CARD&search=passport` | Public | Paginated active services |
 | GET | `/api/v1/services/:slug` | Public | Single service detail |
 
 ### Orders (user)
@@ -188,7 +205,7 @@ Swagger UI is available in development at `http://localhost:3000/api/docs` (disa
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/v1/orders` | JWT | Create order |
-| GET | `/api/v1/orders/my-orders` | JWT | List own orders |
+| GET | `/api/v1/orders/my-orders?page=1&limit=20&status=PENDING&search=ORD` | JWT | Paginated own orders |
 | GET | `/api/v1/orders/:id` | JWT | Single order (ownership enforced) |
 
 ### Orders (admin)
@@ -220,6 +237,7 @@ Swagger UI is available in development at `http://localhost:3000/api/docs` (disa
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
+| GET | `/health` | Public | Container liveness probe |
 | GET | `/api/v1/health` | Public | Liveness probe |
 | GET | `/api/v1/health/db` | Public | Readiness probe (DB connectivity) |
 

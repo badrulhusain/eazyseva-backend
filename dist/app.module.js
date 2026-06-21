@@ -28,22 +28,7 @@ const documents_module_1 = require("./documents/documents.module");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
 const request_id_middleware_1 = require("./common/middleware/request-id.middleware");
 const request_logger_middleware_1 = require("./common/middleware/request-logger.middleware");
-function validateEnv(config) {
-    const required = [
-        'SUPABASE_URL',
-        'SUPABASE_ANON_KEY',
-        'SUPABASE_SERVICE_ROLE_KEY',
-        'SUPABASE_JWT_SECRET',
-        'CLOUDINARY_CLOUD_NAME',
-        'CLOUDINARY_API_KEY',
-        'CLOUDINARY_API_SECRET',
-    ];
-    const missing = required.filter((key) => !config[key]);
-    if (missing.length > 0) {
-        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
-    }
-    return config;
-}
+const env_validation_1 = require("./config/env.validation");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(request_id_middleware_1.RequestIdMiddleware, request_logger_middleware_1.RequestLoggerMiddleware).forRoutes('*');
@@ -55,7 +40,8 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
-                validate: validateEnv,
+                cache: true,
+                validate: env_validation_1.validateEnv,
             }),
             throttler_1.ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
             supabase_module_1.SupabaseModule,

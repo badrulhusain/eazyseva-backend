@@ -5,11 +5,25 @@ import { HttpStatus, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import type { NextFunction, Request, Response } from 'express';
+import { json } from 'express';
+import type { Express, NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 const logger = new Logger('Bootstrap');
+
+function healthPayload() {
+  return {
+    success: true,
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function livenessHandler(_request: Request, response: Response): void {
+  response.status(HttpStatus.OK).json(healthPayload());
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -69,8 +83,13 @@ async function bootstrap() {
   });
 
   // ── Request body limit ───────────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  app.use(require('express').json({ limit: '1mb' }));
+  app.use(json({ limit: '1mb' }));
+
+  // ── Container liveness probe ────────────────────────────────────────────────
+  // Keep an unprefixed /health endpoint for Docker/platform health checks while
+  // preserving the versioned Nest route at /api/v1/health.
+  const expressApp = app.getHttpAdapter().getInstance() as Express;
+  expressApp.get('/health', livenessHandler);
 
   // ── Global prefix ───────────────────────────────────────────────────────────
   app.setGlobalPrefix('api/v1');
@@ -110,4 +129,4 @@ async function bootstrap() {
   app.enableShutdownHooks();
 }
 
-bootstrap();
+void bootstrap();

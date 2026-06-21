@@ -12,9 +12,12 @@ export declare class OrdersController {
         success: boolean;
         data: import("./orders.types").Order;
     }>;
-    getMyOrders(user: CurrentUserType): Promise<{
-        success: boolean;
+    getMyOrders(user: CurrentUserType, query: PaginationDto): Promise<{
         data: import("./orders.types").Order[];
+        total: number;
+        page: number;
+        limit: number;
+        success: boolean;
     }>;
     findOne(id: string, user: CurrentUserType): Promise<{
         success: boolean;

@@ -60,6 +60,18 @@ const STATUS_AUDIT_ACTIONS: Partial<Record<OrderStatus, AuditAction>> = {
   COMPLETED: 'ADMIN_COMPLETED_ORDER',
 };
 
+interface SupabaseErrorLike {
+  code?: string;
+  message: string;
+}
+
+interface PaginatedOrders<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 function buildTimelineEvent(status: OrderStatus, reason?: string): string {
   switch (status) {
     case 'UNDER_REVIEW':
@@ -130,8 +142,10 @@ export class OrdersService {
       Number(service.price) + governmentFee + serviceCharge + documentHandling;
 
     // ── Generate unique order number (atomic, race-condition safe) ──
-    const { data: orderNumber, error: seqError } =
-      await this.supabaseService.admin.rpc('next_order_number');
+    const orderNumberResult = (await this.supabaseService.admin.rpc(
+      'next_order_number',
+    )) as { data: string | null; error: SupabaseErrorLike | null };
+    const { data: orderNumber, error: seqError } = orderNumberResult;
 
     if (seqError || !orderNumber) {
       throw new InternalServerErrorException({
@@ -141,10 +155,10 @@ export class OrdersService {
     }
 
     // ── Insert order row ────────────────────────────────────────────
-    const { data, error } = await this.supabaseService.admin
+    const insertResult = (await this.supabaseService.admin
       .from('orders')
       .insert({
-        order_number: orderNumber as string,
+        order_number: orderNumber,
         user_id: userId,
         service_type: dto.serviceType,
         customer_name: dto.customer.name,
@@ -160,7 +174,8 @@ export class OrdersService {
         payment_status: 'NOT_PAID',
       })
       .select()
-      .single();
+      .single()) as { data: OrderRow | null; error: SupabaseErrorLike | null };
+    const { data, error } = insertResult;
 
     if (error || !data) {
       throw new InternalServerErrorException({
@@ -169,7 +184,7 @@ export class OrdersService {
       });
     }
 
-    const order = OrdersService.formatRow(data as OrderRow);
+    const order = OrdersService.formatRow(data);
     this.logger.log(
       `Order created: ${order.orderNumber} user=${userId} total=${total}`,
     );
@@ -189,12 +204,41 @@ export class OrdersService {
 
   // ── User: list own orders ─────────────────────────────────────────
 
-  async findMyOrders(userId: string): Promise<Order[]> {
-    const { data, error } = await this.supabaseService.admin
+  async findMyOrders(
+    userId: string,
+    pagination: PaginationDto,
+  ): Promise<PaginatedOrders<Order>> {
+    const { page, limit, status, search, dateFrom, dateTo } = pagination;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = this.supabaseService.admin
       .from('orders')
-      .select(ORDER_FULL_COLS)
+      .select(ORDER_FULL_COLS, { count: 'planned' })
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    if (search?.trim()) {
+      const term = `%${search.trim()}%`;
+      query = query.or(
+        `order_number.ilike.${term},customer_name.ilike.${term},customer_phone.ilike.${term}`,
+      );
+    }
+
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom);
+    }
+
+    if (dateTo) {
+      query = query.lte('created_at', dateTo);
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       throw new InternalServerErrorException({
@@ -203,7 +247,14 @@ export class OrdersService {
       });
     }
 
-    return ((data ?? []) as unknown as OrderRow[]).map(OrdersService.formatRow);
+    return {
+      data: ((data ?? []) as unknown as OrderRow[]).map((row) =>
+        OrdersService.formatRow(row),
+      ),
+      total: count ?? 0,
+      page,
+      limit,
+    };
   }
 
   // ── User: get single order ────────────────────────────────────────
@@ -295,8 +346,8 @@ export class OrdersService {
     }
 
     return {
-      data: ((data ?? []) as unknown as Partial<OrderRow>[]).map(
-        OrdersService.formatListRow,
+      data: ((data ?? []) as unknown as Partial<OrderRow>[]).map((row) =>
+        OrdersService.formatListRow(row),
       ),
       total: count ?? 0,
       page,
