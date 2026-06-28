@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  IsUUID,
   Matches,
   MaxLength,
   MinLength,
@@ -105,6 +106,10 @@ export class PriceDto {
 }
 
 export class CreateOrderDto {
+  @IsOptional()
+  @IsUUID('4', { message: 'idempotencyKey must be a valid UUID' })
+  idempotencyKey?: string;
+
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)

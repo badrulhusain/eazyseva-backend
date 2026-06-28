@@ -23,6 +23,10 @@ const request_correction_dto_1 = require("./dto/request-correction.dto");
 const current_user_decorator_1 = require("../auth/decorators/current-user.decorator");
 const admin_guard_1 = require("../auth/guards/admin.guard");
 const pagination_dto_1 = require("../common/dto/pagination.dto");
+const public_decorator_1 = require("../auth/decorators/public.decorator");
+const track_order_dto_1 = require("./dto/track-order.dto");
+const audit_logs_service_1 = require("../audit-logs/audit-logs.service");
+const query_audit_log_dto_1 = require("../audit-logs/dto/query-audit-log.dto");
 let OrdersController = class OrdersController {
     ordersService;
     constructor(ordersService) {
@@ -35,6 +39,17 @@ let OrdersController = class OrdersController {
     async getMyOrders(user, query) {
         const result = await this.ordersService.findMyOrders(user.id, query);
         return { success: true, ...result };
+    }
+    async track(dto) {
+        const data = await this.ordersService.trackPublic(dto.orderNumber, dto.phone);
+        return { success: true, data };
+    }
+    async receipt(id, user, response) {
+        const pdf = await this.ordersService.createReceipt(id, user.id);
+        response.setHeader('Content-Type', 'application/pdf');
+        response.setHeader('Content-Disposition', `attachment; filename="ezyseva-receipt-${id}.pdf"`);
+        response.setHeader('Cache-Control', 'private, no-store');
+        return pdf;
     }
     async findOne(id, user) {
         const data = await this.ordersService.findOne(id, user.id);
@@ -61,6 +76,25 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "getMyOrders", null);
 __decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Post)('track'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, throttler_1.Throttle)({ default: { ttl: 60_000, limit: 8 } }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [track_order_dto_1.TrackOrderDto]),
+    __metadata("design:returntype", Promise)
+], OrdersController.prototype, "track", null);
+__decorate([
+    (0, common_1.Get)(':id/receipt'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Res)({ passthrough: true })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], OrdersController.prototype, "receipt", null);
+__decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
@@ -74,11 +108,21 @@ exports.OrdersController = OrdersController = __decorate([
 ], OrdersController);
 let AdminOrdersController = class AdminOrdersController {
     ordersService;
-    constructor(ordersService) {
+    auditLogsService;
+    constructor(ordersService, auditLogsService) {
         this.ordersService = ordersService;
+        this.auditLogsService = auditLogsService;
     }
     async findAll(query) {
         const result = await this.ordersService.findAll(query);
+        return { success: true, ...result };
+    }
+    async stats() {
+        const data = await this.ordersService.getDashboardStats();
+        return { success: true, data };
+    }
+    async activity(query) {
+        const result = await this.auditLogsService.findRecent(query);
         return { success: true, ...result };
     }
     async findOne(id) {
@@ -114,6 +158,19 @@ __decorate([
     __metadata("design:paramtypes", [pagination_dto_1.PaginationDto]),
     __metadata("design:returntype", Promise)
 ], AdminOrdersController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('stats'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AdminOrdersController.prototype, "stats", null);
+__decorate([
+    (0, common_1.Get)('activity'),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [query_audit_log_dto_1.QueryAuditLogDto]),
+    __metadata("design:returntype", Promise)
+], AdminOrdersController.prototype, "activity", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -167,6 +224,7 @@ __decorate([
 exports.AdminOrdersController = AdminOrdersController = __decorate([
     (0, common_1.UseGuards)(admin_guard_1.AdminGuard),
     (0, common_1.Controller)('admin/orders'),
-    __metadata("design:paramtypes", [orders_service_1.OrdersService])
+    __metadata("design:paramtypes", [orders_service_1.OrdersService,
+        audit_logs_service_1.AuditLogsService])
 ], AdminOrdersController);
 //# sourceMappingURL=orders.controller.js.map

@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { OrderStatus } from '../../orders/orders.types';
+import type { PaymentStatus } from '../../orders/orders.types';
 
 const ORDER_STATUS_VALUES: OrderStatus[] = [
   'PENDING',
@@ -20,6 +21,13 @@ const ORDER_STATUS_VALUES: OrderStatus[] = [
   'COMPLETED',
   'REJECTED',
   'CANCELLED',
+];
+
+const PAYMENT_STATUS_VALUES: PaymentStatus[] = [
+  'NOT_PAID',
+  'PAYMENT_PENDING',
+  'PAID',
+  'FAILED',
 ];
 
 export class PaginationDto {
@@ -41,6 +49,12 @@ export class PaginationDto {
     message: `status must be one of: ${ORDER_STATUS_VALUES.join(', ')}`,
   })
   status?: OrderStatus;
+
+  @IsOptional()
+  @IsEnum(PAYMENT_STATUS_VALUES, {
+    message: `paymentStatus must be one of: ${PAYMENT_STATUS_VALUES.join(', ')}`,
+  })
+  paymentStatus?: PaymentStatus;
 
   // Free-text search across order number / customer name / customer phone.
   @IsOptional()

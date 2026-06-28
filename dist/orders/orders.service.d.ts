@@ -5,7 +5,7 @@ import type { CreateOrderDto } from './dto/create-order.dto';
 import type { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import type { RejectOrderDto } from './dto/reject-order.dto';
 import type { RequestCorrectionDto } from './dto/request-correction.dto';
-import type { AdminOrderSummary, Order } from './orders.types';
+import type { AdminOrderSummary, AdminDashboardStats, Order, PublicTrackedOrder } from './orders.types';
 import type { PaginationDto } from '../common/dto/pagination.dto';
 interface PaginatedOrders<T> {
     data: T[];
@@ -24,6 +24,8 @@ export declare class OrdersService {
     create(dto: CreateOrderDto, userId: string): Promise<Order>;
     findMyOrders(userId: string, pagination: PaginationDto): Promise<PaginatedOrders<Order>>;
     findOne(id: string, userId: string): Promise<Order>;
+    trackPublic(orderNumber: string, phone: string): Promise<PublicTrackedOrder>;
+    createReceipt(id: string, userId: string): Promise<Buffer>;
     findAll(pagination: PaginationDto): Promise<{
         data: AdminOrderSummary[];
         total: number;
@@ -31,6 +33,7 @@ export declare class OrdersService {
         limit: number;
     }>;
     findOneAdmin(id: string): Promise<Order>;
+    getDashboardStats(): Promise<AdminDashboardStats>;
     updateStatus(id: string, dto: UpdateOrderStatusDto, adminId: string): Promise<Order>;
     acceptOrder(id: string, adminId: string): Promise<Order>;
     rejectOrder(id: string, dto: RejectOrderDto, adminId: string): Promise<Order>;
@@ -40,6 +43,10 @@ export declare class OrdersService {
     invalidateServiceCache(slug?: string): void;
     private assertValidTransition;
     private getServiceBySlug;
+    private validateDocumentReferences;
+    private validateRequiredDocuments;
+    private findByIdempotencyKey;
+    private renderReceipt;
     private static formatRow;
     private static formatListRow;
 }

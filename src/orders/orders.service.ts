@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import PDFDocument from 'pdfkit';
 import { SupabaseService } from '../supabase/supabase.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { OrderDocumentsService } from '../documents/documents.service';
@@ -15,10 +16,12 @@ import type { RejectOrderDto } from './dto/reject-order.dto';
 import type { RequestCorrectionDto } from './dto/request-correction.dto';
 import type {
   AdminOrderSummary,
+  AdminDashboardStats,
   Order,
   OrderRow,
   OrderStatus,
   TimelineEntry,
+  PublicTrackedOrder,
 } from './orders.types';
 import type { PaginationDto } from '../common/dto/pagination.dto';
 
@@ -65,6 +68,13 @@ interface SupabaseErrorLike {
   message: string;
 }
 
+interface RequiredDocument {
+  name?: string;
+  label?: string;
+  title?: string;
+  isRequired?: boolean;
+}
+
 interface PaginatedOrders<T> {
   data: T[];
   total: number;
@@ -95,6 +105,13 @@ function buildTimelineEvent(status: OrderStatus, reason?: string): string {
   }
 }
 
+function money(value: number): string {
+  return `INR ${new Intl.NumberFormat('en-IN', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  }).format(value)}`;
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -114,6 +131,7 @@ export class OrdersService {
         price: number;
         govt_fee: number;
         processing_fee: number;
+        required_documents: Array<string | RequiredDocument>;
       } | null;
       expiresAt: number;
     }
@@ -123,6 +141,14 @@ export class OrdersService {
   // ── User: create order ────────────────────────────────────────────
 
   async create(dto: CreateOrderDto, userId: string): Promise<Order> {
+    if (dto.idempotencyKey) {
+      const existing = await this.findByIdempotencyKey(
+        userId,
+        dto.idempotencyKey,
+      );
+      if (existing) return existing;
+    }
+
     // ── Server-side price lookup from service catalog ──────────────
     // Never trust price values from the frontend. Prices come from the
     // services table only. serviceType must match an active service slug.
@@ -134,6 +160,12 @@ export class OrdersService {
         message: `Service "${dto.serviceType}" not found or is not currently available.`,
       });
     }
+
+    this.validateDocumentReferences(dto.documents ?? [], userId);
+    this.validateRequiredDocuments(
+      (service.required_documents ?? []) as Array<string | RequiredDocument>,
+      dto.documents ?? [],
+    );
 
     const governmentFee = Number(service.govt_fee ?? 0);
     const serviceCharge = Number(service.processing_fee ?? 0);
@@ -172,10 +204,27 @@ export class OrdersService {
         price_total: total,
         status: 'PENDING',
         payment_status: 'NOT_PAID',
+        idempotency_key: dto.idempotencyKey ?? null,
+        timeline: [
+          {
+            event: 'Order submitted',
+            status: 'PENDING',
+            timestamp: new Date().toISOString(),
+            actor: 'CUSTOMER',
+          } satisfies TimelineEntry,
+        ],
       })
       .select()
       .single()) as { data: OrderRow | null; error: SupabaseErrorLike | null };
     const { data, error } = insertResult;
+
+    if (error?.code === '23505' && dto.idempotencyKey) {
+      const existing = await this.findByIdempotencyKey(
+        userId,
+        dto.idempotencyKey,
+      );
+      if (existing) return existing;
+    }
 
     if (error || !data) {
       throw new InternalServerErrorException({
@@ -208,19 +257,23 @@ export class OrdersService {
     userId: string,
     pagination: PaginationDto,
   ): Promise<PaginatedOrders<Order>> {
-    const { page, limit, status, search, dateFrom, dateTo } = pagination;
+    const { page, limit, status, paymentStatus, search, dateFrom, dateTo } =
+      pagination;
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
     let query = this.supabaseService.admin
       .from('orders')
-      .select(ORDER_FULL_COLS, { count: 'planned' })
+      .select(ORDER_FULL_COLS, { count: 'exact' })
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(from, to);
 
     if (status) {
       query = query.eq('status', status);
+    }
+    if (paymentStatus) {
+      query = query.eq('payment_status', paymentStatus);
     }
 
     if (search?.trim()) {
@@ -295,6 +348,49 @@ export class OrdersService {
     return OrdersService.formatRow(data as unknown as OrderRow);
   }
 
+  async trackPublic(
+    orderNumber: string,
+    phone: string,
+  ): Promise<PublicTrackedOrder> {
+    const { data, error } = await this.supabaseService.admin
+      .from('orders')
+      .select(
+        'order_number, service_type, status, payment_status, timeline, created_at, updated_at',
+      )
+      .ilike('order_number', orderNumber.trim())
+      .eq('customer_phone', phone.trim())
+      .maybeSingle();
+
+    if (error) {
+      this.logger.error(`Public tracking lookup failed: ${error.message}`);
+      throw new InternalServerErrorException({
+        code: 'TRACKING_UNAVAILABLE',
+        message: 'Order tracking is temporarily unavailable',
+      });
+    }
+    if (!data) {
+      throw new NotFoundException({
+        code: 'ORDER_NOT_FOUND',
+        message: 'No order matched those details',
+      });
+    }
+
+    return {
+      orderNumber: data.order_number as string,
+      serviceType: data.service_type as string,
+      status: data.status as OrderStatus,
+      paymentStatus: data.payment_status as Order['paymentStatus'],
+      timeline: (data.timeline ?? []) as TimelineEntry[],
+      createdAt: data.created_at as string,
+      updatedAt: data.updated_at as string,
+    };
+  }
+
+  async createReceipt(id: string, userId: string): Promise<Buffer> {
+    const order = await this.findOne(id, userId);
+    return this.renderReceipt(order);
+  }
+
   // ── Admin: paginated list ─────────────────────────────────────────
 
   async findAll(pagination: PaginationDto): Promise<{
@@ -303,22 +399,23 @@ export class OrdersService {
     page: number;
     limit: number;
   }> {
-    const { page, limit, status, search, dateFrom, dateTo } = pagination;
+    const { page, limit, status, paymentStatus, search, dateFrom, dateTo } =
+      pagination;
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
     // Use lightweight column list — full order data is available via findOneAdmin.
-    // count:'planned' uses the PostgreSQL query planner's row estimate; it is
-    // instantaneous but may differ from the exact count by a few percent.
-    // Acceptable for pagination UI; use count:'exact' if you need precise counts.
     let query = this.supabaseService.admin
       .from('orders')
-      .select(ORDER_LIST_COLS, { count: 'planned' })
+      .select(ORDER_LIST_COLS, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
 
     if (status) {
       query = query.eq('status', status);
+    }
+    if (paymentStatus) {
+      query = query.eq('payment_status', paymentStatus);
     }
 
     if (search?.trim()) {
@@ -390,6 +487,44 @@ export class OrdersService {
     }
 
     return OrdersService.formatRow(data as unknown as OrderRow);
+  }
+
+  async getDashboardStats(): Promise<AdminDashboardStats> {
+    const { data, error } = (await this.supabaseService.admin.rpc(
+      'admin_order_dashboard_stats',
+    )) as {
+      data: {
+        totalOrders?: number | string;
+        newLast7Days?: number | string;
+        pendingPayment?: number | string;
+        paidRevenue?: number | string;
+        statusCounts?: Partial<Record<OrderStatus, number | string>>;
+      } | null;
+      error: SupabaseErrorLike | null;
+    };
+
+    if (error || !data) {
+      throw new InternalServerErrorException({
+        code: 'STATS_UNAVAILABLE',
+        message: error?.message ?? 'Dashboard stats are unavailable',
+      });
+    }
+
+    const statuses = Object.keys(STATUS_TRANSITIONS) as OrderStatus[];
+    const statusCounts = Object.fromEntries(
+      statuses.map((status) => [
+        status,
+        Number(data.statusCounts?.[status] ?? 0),
+      ]),
+    ) as Record<OrderStatus, number>;
+
+    return {
+      totalOrders: Number(data.totalOrders ?? 0),
+      newLast7Days: Number(data.newLast7Days ?? 0),
+      pendingPayment: Number(data.pendingPayment ?? 0),
+      paidRevenue: Number(data.paidRevenue ?? 0),
+      statusCounts,
+    };
   }
 
   // ── Admin: update status (generic — kept for backward-compat with the ─────
@@ -475,6 +610,9 @@ export class OrdersService {
     const timelineEntry: TimelineEntry = {
       event: buildTimelineEvent(nextStatus, opts.reason),
       timestamp: now,
+      status: nextStatus,
+      note: opts.reason?.trim() || undefined,
+      actor: 'ADMIN',
     };
 
     const updatePayload: Record<string, unknown> = {
@@ -529,21 +667,21 @@ export class OrdersService {
       `Order ${updated.orderNumber} status: ${current.status} → ${nextStatus} by admin=${adminId}`,
     );
 
-    const auditAction = STATUS_AUDIT_ACTIONS[nextStatus];
-    if (auditAction) {
-      // Fire-and-forget — AuditLogsService.record() never throws (it logs and swallows its own errors).
-      void this.auditLogsService.record(
-        adminId,
-        auditAction,
-        'order',
-        updated.id,
-        {
-          orderNumber: updated.orderNumber,
-          previousStatus: current.status,
-          ...(opts.reason ? { reason: opts.reason.trim() } : {}),
-        },
-      );
-    }
+    const auditAction =
+      STATUS_AUDIT_ACTIONS[nextStatus] ?? 'ADMIN_UPDATED_ORDER_STATUS';
+    void this.auditLogsService.record(
+      adminId,
+      auditAction,
+      'order',
+      updated.id,
+      {
+        orderNumber: updated.orderNumber,
+        previousStatus: current.status,
+        nextStatus,
+        ...(opts.reason ? { reason: opts.reason.trim() } : {}),
+        ...(opts.adminNote ? { hasInternalNote: true } : {}),
+      },
+    );
 
     if (nextStatus === 'COMPLETED') {
       this.orderDocumentsService
@@ -587,7 +725,7 @@ export class OrdersService {
 
     const { data, error } = await this.supabaseService.admin
       .from('services')
-      .select('id, price, govt_fee, processing_fee')
+      .select('id, price, govt_fee, processing_fee, required_documents')
       .eq('slug', slug)
       .eq('is_active', true)
       .maybeSingle();
@@ -604,6 +742,163 @@ export class OrdersService {
       expiresAt: Date.now() + this.SERVICES_CACHE_TTL,
     });
     return data ?? null;
+  }
+
+  private validateDocumentReferences(
+    documents: NonNullable<CreateOrderDto['documents']>,
+    userId: string,
+  ): void {
+    const allowedPrefixes = [
+      `ezyseva/documents/${userId}/`,
+      `ezyseva/order-documents/${userId}/`,
+    ];
+
+    for (const document of documents) {
+      let urlMatchesUpload = false;
+      try {
+        const url = new URL(document.url);
+        urlMatchesUpload =
+          url.protocol === 'https:' &&
+          url.hostname === 'res.cloudinary.com' &&
+          decodeURIComponent(url.pathname).includes(document.publicId ?? '');
+      } catch {
+        urlMatchesUpload = false;
+      }
+
+      if (
+        !document.publicId ||
+        !allowedPrefixes.some((prefix) =>
+          document.publicId!.startsWith(prefix),
+        ) ||
+        !urlMatchesUpload
+      ) {
+        throw new BadRequestException({
+          code: 'INVALID_DOCUMENT_REFERENCE',
+          message:
+            'Every order document must be a valid upload owned by the current user',
+        });
+      }
+    }
+  }
+
+  private validateRequiredDocuments(
+    required: Array<string | RequiredDocument>,
+    uploaded: NonNullable<CreateOrderDto['documents']>,
+  ): void {
+    const normalize = (value: string) =>
+      value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const parseRequiredDocument = (
+      item: string | RequiredDocument,
+    ): RequiredDocument => {
+      if (typeof item !== 'string') return item;
+
+      try {
+        const parsed: unknown = JSON.parse(item);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as RequiredDocument;
+        }
+      } catch {
+        // Legacy rows may contain a plain document name rather than JSON.
+      }
+
+      return { name: item };
+    };
+    const uploadedNames = new Set(
+      uploaded.flatMap((document) =>
+        [document.name, document.label]
+          .filter((value): value is string => Boolean(value))
+          .map(normalize),
+      ),
+    );
+    const missing = required
+      .map(parseRequiredDocument)
+      .filter((item) => item.isRequired !== false)
+      .map((item) => item.label ?? item.name ?? item.title ?? '')
+      .filter(Boolean)
+      .filter((name) => !uploadedNames.has(normalize(name)));
+
+    if (missing.length > 0) {
+      throw new BadRequestException({
+        code: 'MISSING_REQUIRED_DOCUMENTS',
+        message: `Missing required documents: ${missing.join(', ')}`,
+      });
+    }
+  }
+
+  private async findByIdempotencyKey(
+    userId: string,
+    idempotencyKey: string,
+  ): Promise<Order | null> {
+    const { data, error } = await this.supabaseService.admin
+      .from('orders')
+      .select(ORDER_FULL_COLS)
+      .eq('user_id', userId)
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerErrorException({
+        code: 'DB_ERROR',
+        message: error.message,
+      });
+    }
+    return data ? OrdersService.formatRow(data as unknown as OrderRow) : null;
+  }
+
+  private renderReceipt(order: Order): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 48 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      doc.fontSize(24).fillColor('#2449A8').text('EzySeva Order Receipt');
+      doc
+        .moveDown(0.3)
+        .fontSize(10)
+        .fillColor('#526078')
+        .text('Service application acknowledgement');
+      doc.moveDown(1.4);
+
+      const row = (label: string, value: string) => {
+        doc
+          .fontSize(10)
+          .fillColor('#8290A7')
+          .text(label, { continued: true, width: 170 });
+        doc.fillColor('#101D36').text(value);
+        doc.moveDown(0.45);
+      };
+
+      row('Order number', order.orderNumber);
+      row('Created', new Date(order.createdAt).toLocaleString('en-IN'));
+      row('Service', order.serviceType.replace(/[-_]+/g, ' '));
+      row('Customer', order.customer.name);
+      row('Phone', order.customer.phone);
+      row('Order status', order.status.replace(/_/g, ' '));
+      row('Payment status', order.paymentStatus.replace(/_/g, ' '));
+      doc.moveDown(0.8);
+
+      doc.fontSize(14).fillColor('#101D36').text('Amount summary');
+      doc.moveDown(0.5);
+      row('Government fee', money(order.price.governmentFee));
+      row('Service charge', money(order.price.serviceCharge));
+      row('Document handling', money(order.price.documentHandling));
+      doc.moveTo(48, doc.y).lineTo(547, doc.y).strokeColor('#D8E1ED').stroke();
+      doc.moveDown(0.7);
+      doc
+        .fontSize(13)
+        .fillColor('#101D36')
+        .text(`Total: ${money(order.price.total)}`);
+      doc.moveDown(1.2);
+      doc
+        .fontSize(9)
+        .fillColor('#526078')
+        .text(
+          'This receipt confirms that EzySeva received the service request. It is not a government-issued certificate or payment tax invoice.',
+        );
+      doc.end();
+    });
   }
 
   private static formatRow(row: OrderRow): Order {

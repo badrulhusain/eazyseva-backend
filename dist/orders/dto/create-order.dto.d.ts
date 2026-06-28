@@ -21,6 +21,7 @@ export declare class PriceDto {
     total?: number;
 }
 export declare class CreateOrderDto {
+    idempotencyKey?: string;
     serviceType: string;
     customer: CustomerDto;
     documents?: DocumentDto[];

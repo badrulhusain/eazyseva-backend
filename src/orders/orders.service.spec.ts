@@ -106,6 +106,63 @@ function buildOrderRow(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe('OrdersService', () => {
+  describe('required document validation', () => {
+    const buildService = () =>
+      new OrdersService({} as any, {} as any, {} as any);
+
+    const uploadedDocument = (name: string, label?: string) =>
+      ({
+        name,
+        label,
+        url: 'https://res.cloudinary.com/demo/image/upload/document.jpg',
+        publicId: 'ezyseva/documents/user-1/document',
+      }) as any;
+
+    it('accepts a JSON-encoded required document when its name was uploaded', () => {
+      const service = buildService();
+
+      expect(() =>
+        (service as any).validateRequiredDocuments(
+          ['{"name":"pan card","isRequired":true}'],
+          [uploadedDocument('panCard')],
+        ),
+      ).not.toThrow();
+    });
+
+    it('accepts structured required documents and matches their labels', () => {
+      const service = buildService();
+
+      expect(() =>
+        (service as any).validateRequiredDocuments(
+          [{ name: 'panCard', label: 'PAN Card', isRequired: true }],
+          [uploadedDocument('identityProof', 'Pan card')],
+        ),
+      ).not.toThrow();
+    });
+
+    it('does not require entries explicitly marked optional', () => {
+      const service = buildService();
+
+      expect(() =>
+        (service as any).validateRequiredDocuments(
+          [{ name: 'supporting document', isRequired: false }],
+          [],
+        ),
+      ).not.toThrow();
+    });
+
+    it('reports the parsed document name instead of raw JSON', () => {
+      const service = buildService();
+
+      expect(() =>
+        (service as any).validateRequiredDocuments(
+          ['{"name":"pan card","isRequired":true}'],
+          [],
+        ),
+      ).toThrow('Missing required documents: pan card');
+    });
+  });
+
   describe('findOne (user single order)', () => {
     it('returns order when id and user_id both match', async () => {
       const row = {

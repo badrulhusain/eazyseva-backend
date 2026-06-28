@@ -46,6 +46,9 @@ export interface OrderPayment {
 export interface TimelineEntry {
   event: string;
   timestamp: string;
+  status?: OrderStatus;
+  note?: string;
+  actor?: 'CUSTOMER' | 'ADMIN' | 'SYSTEM';
 }
 
 /** Full order shape — returned by single-order endpoints. */
@@ -115,4 +118,36 @@ export interface OrderRow {
   reviewed_at: string | null;
   created_at: string;
   updated_at: string;
+  idempotency_key?: string | null;
+}
+
+export interface PublicTrackedOrder {
+  orderNumber: string;
+  serviceType: string;
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  timeline: TimelineEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminDashboardStats {
+  totalOrders: number;
+  newLast7Days: number;
+  pendingPayment: number;
+  paidRevenue: number;
+  statusCounts: Record<OrderStatus, number>;
+}
+
+export interface AdminActivityItem {
+  id: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  admin: {
+    id: string | null;
+    name: string;
+  };
 }

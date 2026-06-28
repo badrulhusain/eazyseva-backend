@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -21,6 +22,11 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import type { CurrentUser as CurrentUserType } from '../common/types/current-user.type';
+import { Public } from '../auth/decorators/public.decorator';
+import { TrackOrderDto } from './dto/track-order.dto';
+import type { Response } from 'express';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { QueryAuditLogDto } from '../audit-logs/dto/query-audit-log.dto';
 
 // ── User-facing routes (JWT only) ─────────────────────────────────────────────
 
@@ -48,6 +54,34 @@ export class OrdersController {
     return { success: true, ...result };
   }
 
+  @Public()
+  @Post('track')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60_000, limit: 8 } })
+  async track(@Body() dto: TrackOrderDto) {
+    const data = await this.ordersService.trackPublic(
+      dto.orderNumber,
+      dto.phone,
+    );
+    return { success: true, data };
+  }
+
+  @Get(':id/receipt')
+  async receipt(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserType,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const pdf = await this.ordersService.createReceipt(id, user.id);
+    response.setHeader('Content-Type', 'application/pdf');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="ezyseva-receipt-${id}.pdf"`,
+    );
+    response.setHeader('Cache-Control', 'private, no-store');
+    return pdf;
+  }
+
   @Get(':id')
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
@@ -63,7 +97,10 @@ export class OrdersController {
 @UseGuards(AdminGuard)
 @Controller('admin/orders')
 export class AdminOrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly auditLogsService: AuditLogsService,
+  ) {}
 
   /**
    * GET /api/v1/admin/orders?page=1&limit=20&status=PENDING
@@ -75,6 +112,18 @@ export class AdminOrdersController {
   @Get()
   async findAll(@Query() query: PaginationDto) {
     const result = await this.ordersService.findAll(query);
+    return { success: true, ...result };
+  }
+
+  @Get('stats')
+  async stats() {
+    const data = await this.ordersService.getDashboardStats();
+    return { success: true, data };
+  }
+
+  @Get('activity')
+  async activity(@Query() query: QueryAuditLogDto) {
+    const result = await this.auditLogsService.findRecent(query);
     return { success: true, ...result };
   }
 

@@ -5,6 +5,10 @@ import { RejectOrderDto } from './dto/reject-order.dto';
 import { RequestCorrectionDto } from './dto/request-correction.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import type { CurrentUser as CurrentUserType } from '../common/types/current-user.type';
+import { TrackOrderDto } from './dto/track-order.dto';
+import type { Response } from 'express';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { QueryAuditLogDto } from '../audit-logs/dto/query-audit-log.dto';
 export declare class OrdersController {
     private readonly ordersService;
     constructor(ordersService: OrdersService);
@@ -19,6 +23,11 @@ export declare class OrdersController {
         limit: number;
         success: boolean;
     }>;
+    track(dto: TrackOrderDto): Promise<{
+        success: boolean;
+        data: import("./orders.types").PublicTrackedOrder;
+    }>;
+    receipt(id: string, user: CurrentUserType, response: Response): Promise<Buffer<ArrayBufferLike>>;
     findOne(id: string, user: CurrentUserType): Promise<{
         success: boolean;
         data: import("./orders.types").Order;
@@ -26,9 +35,21 @@ export declare class OrdersController {
 }
 export declare class AdminOrdersController {
     private readonly ordersService;
-    constructor(ordersService: OrdersService);
+    private readonly auditLogsService;
+    constructor(ordersService: OrdersService, auditLogsService: AuditLogsService);
     findAll(query: PaginationDto): Promise<{
         data: import("./orders.types").AdminOrderSummary[];
+        total: number;
+        page: number;
+        limit: number;
+        success: boolean;
+    }>;
+    stats(): Promise<{
+        success: boolean;
+        data: import("./orders.types").AdminDashboardStats;
+    }>;
+    activity(query: QueryAuditLogDto): Promise<{
+        data: import("./orders.types").AdminActivityItem[];
         total: number;
         page: number;
         limit: number;

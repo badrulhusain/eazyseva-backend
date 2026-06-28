@@ -14,7 +14,10 @@ export interface ServiceListItem {
 }
 export interface ServiceItem extends ServiceListItem {
     description: string | null;
-    required_documents: string[];
+    required_documents: Array<{
+        name: string;
+        isRequired: boolean;
+    }>;
     is_active: boolean;
     created_at: string;
     updated_at: string;

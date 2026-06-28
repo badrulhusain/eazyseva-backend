@@ -2,7 +2,7 @@ import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { PaginationDto } from './pagination.dto';
 
-async function validateDto(plain: Record<string, unknown>) {
+function validateDto(plain: Record<string, unknown>) {
   const dto = plainToInstance(PaginationDto, plain, {
     enableImplicitConversion: true,
   });
@@ -15,7 +15,7 @@ describe('PaginationDto', () => {
     expect(errors).toHaveLength(0);
   });
 
-  it('defaults page to 1 and limit to 20 when not provided', async () => {
+  it('defaults page to 1 and limit to 20 when not provided', () => {
     const dto = plainToInstance(
       PaginationDto,
       {},
@@ -55,5 +55,11 @@ describe('PaginationDto', () => {
       const errors = await validateDto({ status });
       expect(errors).toHaveLength(0);
     }
+  });
+
+  it('validates payment status filters', async () => {
+    expect(await validateDto({ paymentStatus: 'PAID' })).toHaveLength(0);
+    const errors = await validateDto({ paymentStatus: 'REFUNDED' });
+    expect(errors.some((e) => e.property === 'paymentStatus')).toBe(true);
   });
 });

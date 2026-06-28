@@ -128,12 +128,18 @@ __decorate([
     __metadata("design:type", Number)
 ], PriceDto.prototype, "total", void 0);
 class CreateOrderDto {
+    idempotencyKey;
     serviceType;
     customer;
     documents;
     price;
 }
 exports.CreateOrderDto = CreateOrderDto;
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsUUID)('4', { message: 'idempotencyKey must be a valid UUID' }),
+    __metadata("design:type", String)
+], CreateOrderDto.prototype, "idempotencyKey", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
