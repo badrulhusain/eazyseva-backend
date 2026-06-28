@@ -11,6 +11,19 @@ import type { AdminActivityItem } from '../orders/orders.types';
 @Injectable()
 export class AuditLogsService {
   private readonly logger = new Logger(AuditLogsService.name);
+  private readonly recentCache = new Map<
+    string,
+    {
+      data: {
+        data: AdminActivityItem[];
+        total: number;
+        page: number;
+        limit: number;
+      };
+      expiresAt: number;
+    }
+  >();
+  private readonly RECENT_CACHE_TTL = 10_000;
 
   constructor(private readonly supabaseService: SupabaseService) {}
 
@@ -40,6 +53,7 @@ export class AuditLogsService {
         `Failed to record audit log: action=${action} target=${targetType}/${targetId}: ${error.message}`,
       );
     }
+    this.recentCache.clear();
   }
 
   async findRecent(query: QueryAuditLogDto): Promise<{
@@ -49,13 +63,17 @@ export class AuditLogsService {
     limit: number;
   }> {
     const { page, limit } = query;
+    const cacheKey = `${page}:${limit}`;
+    const cached = this.recentCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
     const { data, error, count } = await this.supabaseService.admin
       .from('audit_logs')
       .select(
         'id, admin_id, action, target_type, target_id, metadata, created_at',
-        { count: 'exact' },
+        { count: 'planned' },
       )
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -109,7 +127,7 @@ export class AuditLogsService {
       }
     }
 
-    return {
+    const result = {
       data: rows.map((row) => ({
         id: row.id,
         action: row.action,
@@ -128,5 +146,10 @@ export class AuditLogsService {
       page,
       limit,
     };
+    this.recentCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + this.RECENT_CACHE_TTL,
+    });
+    return result;
   }
 }

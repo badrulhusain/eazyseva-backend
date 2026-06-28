@@ -84,6 +84,10 @@ let OrdersService = OrdersService_1 = class OrdersService {
     }
     servicesCache = new Map();
     SERVICES_CACHE_TTL = 30_000;
+    adminListCache = new Map();
+    adminStatsCache = new Map();
+    ADMIN_LIST_CACHE_TTL = 10_000;
+    ADMIN_STATS_CACHE_TTL = 10_000;
     async create(dto, userId) {
         if (dto.idempotencyKey) {
             const existing = await this.findByIdempotencyKey(userId, dto.idempotencyKey);
@@ -153,6 +157,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
             });
         }
         const order = OrdersService_1.formatRow(data);
+        this.invalidateAdminReadCaches();
         this.logger.log(`Order created: ${order.orderNumber} user=${userId} total=${total}`);
         this.orderDocumentsService
             .trackDocuments(order.id, userId, dto.documents ?? [])
@@ -265,11 +270,15 @@ let OrdersService = OrdersService_1 = class OrdersService {
     }
     async findAll(pagination) {
         const { page, limit, status, paymentStatus, search, dateFrom, dateTo } = pagination;
+        const cacheKey = OrdersService_1.adminListCacheKey(pagination);
+        const cached = this.adminListCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now())
+            return cached.data;
         const from = (page - 1) * limit;
         const to = from + limit - 1;
         let query = this.supabaseService.admin
             .from('orders')
-            .select(ORDER_LIST_COLS, { count: 'exact' })
+            .select(ORDER_LIST_COLS, { count: 'planned' })
             .order('created_at', { ascending: false })
             .range(from, to);
         if (status) {
@@ -295,12 +304,17 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 message: error.message,
             });
         }
-        return {
+        const result = {
             data: (data ?? []).map((row) => OrdersService_1.formatListRow(row)),
             total: count ?? 0,
             page,
             limit,
         };
+        this.adminListCache.set(cacheKey, {
+            data: result,
+            expiresAt: Date.now() + this.ADMIN_LIST_CACHE_TTL,
+        });
+        return result;
     }
     async findOneAdmin(id) {
         const { data, error } = await this.supabaseService.admin
@@ -330,6 +344,9 @@ let OrdersService = OrdersService_1 = class OrdersService {
         return OrdersService_1.formatRow(data);
     }
     async getDashboardStats() {
+        const cached = this.adminStatsCache.get('dashboard');
+        if (cached && cached.expiresAt > Date.now())
+            return cached.data;
         const { data, error } = (await this.supabaseService.admin.rpc('admin_order_dashboard_stats'));
         if (error || !data) {
             throw new common_1.InternalServerErrorException({
@@ -342,13 +359,18 @@ let OrdersService = OrdersService_1 = class OrdersService {
             status,
             Number(data.statusCounts?.[status] ?? 0),
         ]));
-        return {
+        const result = {
             totalOrders: Number(data.totalOrders ?? 0),
             newLast7Days: Number(data.newLast7Days ?? 0),
             pendingPayment: Number(data.pendingPayment ?? 0),
             paidRevenue: Number(data.paidRevenue ?? 0),
             statusCounts,
         };
+        this.adminStatsCache.set('dashboard', {
+            data: result,
+            expiresAt: Date.now() + this.ADMIN_STATS_CACHE_TTL,
+        });
+        return result;
     }
     async updateStatus(id, dto, adminId) {
         if ((dto.status === 'REJECTED' || dto.status === 'CORRECTION_REQUESTED') &&
@@ -431,6 +453,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
             });
         }
         const updated = OrdersService_1.formatRow(data);
+        this.invalidateAdminReadCaches();
         this.logger.log(`Order ${updated.orderNumber} status: ${current.status} → ${nextStatus} by admin=${adminId}`);
         const auditAction = STATUS_AUDIT_ACTIONS[nextStatus] ?? 'ADMIN_UPDATED_ORDER_STATUS';
         void this.auditLogsService.record(adminId, auditAction, 'order', updated.id, {
@@ -456,6 +479,10 @@ let OrdersService = OrdersService_1 = class OrdersService {
         else {
             this.servicesCache.clear();
         }
+    }
+    invalidateAdminReadCaches() {
+        this.adminListCache.clear();
+        this.adminStatsCache.clear();
     }
     assertValidTransition(current, next) {
         const allowed = STATUS_TRANSITIONS[current];
@@ -664,6 +691,17 @@ let OrdersService = OrdersService_1 = class OrdersService {
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         };
+    }
+    static adminListCacheKey(pagination) {
+        return JSON.stringify({
+            page: pagination.page,
+            limit: pagination.limit,
+            status: pagination.status ?? '',
+            paymentStatus: pagination.paymentStatus ?? '',
+            search: pagination.search?.trim() ?? '',
+            dateFrom: pagination.dateFrom ?? '',
+            dateTo: pagination.dateTo ?? '',
+        });
     }
 };
 exports.OrdersService = OrdersService;

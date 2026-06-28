@@ -32,6 +32,10 @@ export class ServicesService {
     string,
     { data: PaginatedServices<ServiceListItem>; expiresAt: number }
   >();
+  private readonly adminListCache = new Map<
+    string,
+    { data: PaginatedServices<ServiceItem>; expiresAt: number }
+  >();
   private readonly publicDetailCache = new Map<
     string,
     { data: ServiceItem; expiresAt: number }
@@ -93,6 +97,10 @@ export class ServicesService {
     query: ServiceQueryDto,
   ): Promise<PaginatedServices<ServiceItem>> {
     const { page, limit, category, search } = query;
+    const cacheKey = ServicesService.listCacheKey(query);
+    const cached = this.adminListCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -117,12 +125,17 @@ export class ServicesService {
         code: 'DB_ERROR',
         message: error.message,
       });
-    return {
+    const result = {
       data: data ?? [],
       total: count ?? 0,
       page,
       limit,
     };
+    this.adminListCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
+    });
+    return result;
   }
 
   async findBySlug(slug: string): Promise<ServiceItem> {
@@ -290,10 +303,15 @@ export class ServicesService {
 
   private invalidatePublicCache(): void {
     this.publicListCache.clear();
+    this.adminListCache.clear();
     this.publicDetailCache.clear();
   }
 
   private static publicListCacheKey(query: ServiceQueryDto): string {
+    return ServicesService.listCacheKey(query);
+  }
+
+  private static listCacheKey(query: ServiceQueryDto): string {
     return JSON.stringify({
       page: query.page,
       limit: query.limit,

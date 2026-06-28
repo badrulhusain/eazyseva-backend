@@ -137,6 +137,24 @@ export class OrdersService {
     }
   >();
   private readonly SERVICES_CACHE_TTL = 30_000;
+  private readonly adminListCache = new Map<
+    string,
+    {
+      data: {
+        data: AdminOrderSummary[];
+        total: number;
+        page: number;
+        limit: number;
+      };
+      expiresAt: number;
+    }
+  >();
+  private readonly adminStatsCache = new Map<
+    string,
+    { data: AdminDashboardStats; expiresAt: number }
+  >();
+  private readonly ADMIN_LIST_CACHE_TTL = 10_000;
+  private readonly ADMIN_STATS_CACHE_TTL = 10_000;
 
   // ── User: create order ────────────────────────────────────────────
 
@@ -234,6 +252,7 @@ export class OrdersService {
     }
 
     const order = OrdersService.formatRow(data);
+    this.invalidateAdminReadCaches();
     this.logger.log(
       `Order created: ${order.orderNumber} user=${userId} total=${total}`,
     );
@@ -401,13 +420,17 @@ export class OrdersService {
   }> {
     const { page, limit, status, paymentStatus, search, dateFrom, dateTo } =
       pagination;
+    const cacheKey = OrdersService.adminListCacheKey(pagination);
+    const cached = this.adminListCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
     // Use lightweight column list — full order data is available via findOneAdmin.
     let query = this.supabaseService.admin
       .from('orders')
-      .select(ORDER_LIST_COLS, { count: 'exact' })
+      .select(ORDER_LIST_COLS, { count: 'planned' })
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -442,7 +465,7 @@ export class OrdersService {
       });
     }
 
-    return {
+    const result = {
       data: ((data ?? []) as unknown as Partial<OrderRow>[]).map((row) =>
         OrdersService.formatListRow(row),
       ),
@@ -450,6 +473,11 @@ export class OrdersService {
       page,
       limit,
     };
+    this.adminListCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + this.ADMIN_LIST_CACHE_TTL,
+    });
+    return result;
   }
 
   // ── Admin: single order (full detail) ────────────────────────────
@@ -490,6 +518,9 @@ export class OrdersService {
   }
 
   async getDashboardStats(): Promise<AdminDashboardStats> {
+    const cached = this.adminStatsCache.get('dashboard');
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
     const { data, error } = (await this.supabaseService.admin.rpc(
       'admin_order_dashboard_stats',
     )) as {
@@ -518,13 +549,18 @@ export class OrdersService {
       ]),
     ) as Record<OrderStatus, number>;
 
-    return {
+    const result = {
       totalOrders: Number(data.totalOrders ?? 0),
       newLast7Days: Number(data.newLast7Days ?? 0),
       pendingPayment: Number(data.pendingPayment ?? 0),
       paidRevenue: Number(data.paidRevenue ?? 0),
       statusCounts,
     };
+    this.adminStatsCache.set('dashboard', {
+      data: result,
+      expiresAt: Date.now() + this.ADMIN_STATS_CACHE_TTL,
+    });
+    return result;
   }
 
   // ── Admin: update status (generic — kept for backward-compat with the ─────
@@ -663,6 +699,7 @@ export class OrdersService {
     }
 
     const updated = OrdersService.formatRow(data as unknown as OrderRow);
+    this.invalidateAdminReadCaches();
     this.logger.log(
       `Order ${updated.orderNumber} status: ${current.status} → ${nextStatus} by admin=${adminId}`,
     );
@@ -703,6 +740,11 @@ export class OrdersService {
     } else {
       this.servicesCache.clear();
     }
+  }
+
+  invalidateAdminReadCaches(): void {
+    this.adminListCache.clear();
+    this.adminStatsCache.clear();
   }
 
   private assertValidTransition(current: OrderStatus, next: OrderStatus): void {
@@ -953,5 +995,17 @@ export class OrdersService {
       createdAt: row.created_at!,
       updatedAt: row.updated_at!,
     };
+  }
+
+  private static adminListCacheKey(pagination: PaginationDto): string {
+    return JSON.stringify({
+      page: pagination.page,
+      limit: pagination.limit,
+      status: pagination.status ?? '',
+      paymentStatus: pagination.paymentStatus ?? '',
+      search: pagination.search?.trim() ?? '',
+      dateFrom: pagination.dateFrom ?? '',
+      dateTo: pagination.dateTo ?? '',
+    });
   }
 }

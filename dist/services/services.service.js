@@ -21,6 +21,7 @@ let ServicesService = ServicesService_1 = class ServicesService {
     ordersService;
     logger = new common_1.Logger(ServicesService_1.name);
     publicListCache = new Map();
+    adminListCache = new Map();
     publicDetailCache = new Map();
     PUBLIC_CACHE_TTL = 30_000;
     constructor(supabaseService, ordersService) {
@@ -68,6 +69,10 @@ let ServicesService = ServicesService_1 = class ServicesService {
     }
     async findAllAdmin(query) {
         const { page, limit, category, search } = query;
+        const cacheKey = ServicesService_1.listCacheKey(query);
+        const cached = this.adminListCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now())
+            return cached.data;
         const from = (page - 1) * limit;
         const to = from + limit - 1;
         let dbQuery = this.supabaseService.admin
@@ -88,12 +93,17 @@ let ServicesService = ServicesService_1 = class ServicesService {
                 code: 'DB_ERROR',
                 message: error.message,
             });
-        return {
+        const result = {
             data: data ?? [],
             total: count ?? 0,
             page,
             limit,
         };
+        this.adminListCache.set(cacheKey, {
+            data: result,
+            expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
+        });
+        return result;
     }
     async findBySlug(slug) {
         const cached = this.publicDetailCache.get(slug);
@@ -253,9 +263,13 @@ let ServicesService = ServicesService_1 = class ServicesService {
     }
     invalidatePublicCache() {
         this.publicListCache.clear();
+        this.adminListCache.clear();
         this.publicDetailCache.clear();
     }
     static publicListCacheKey(query) {
+        return ServicesService_1.listCacheKey(query);
+    }
+    static listCacheKey(query) {
         return JSON.stringify({
             page: query.page,
             limit: query.limit,

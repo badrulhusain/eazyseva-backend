@@ -21,6 +21,10 @@ export declare class OrdersService {
     constructor(supabaseService: SupabaseService, auditLogsService: AuditLogsService, orderDocumentsService: OrderDocumentsService);
     private readonly servicesCache;
     private readonly SERVICES_CACHE_TTL;
+    private readonly adminListCache;
+    private readonly adminStatsCache;
+    private readonly ADMIN_LIST_CACHE_TTL;
+    private readonly ADMIN_STATS_CACHE_TTL;
     create(dto: CreateOrderDto, userId: string): Promise<Order>;
     findMyOrders(userId: string, pagination: PaginationDto): Promise<PaginatedOrders<Order>>;
     findOne(id: string, userId: string): Promise<Order>;
@@ -41,6 +45,7 @@ export declare class OrdersService {
     completeOrder(id: string, adminId: string): Promise<Order>;
     private applyStatusChange;
     invalidateServiceCache(slug?: string): void;
+    invalidateAdminReadCaches(): void;
     private assertValidTransition;
     private getServiceBySlug;
     private validateDocumentReferences;
@@ -49,5 +54,6 @@ export declare class OrdersService {
     private renderReceipt;
     private static formatRow;
     private static formatListRow;
+    private static adminListCacheKey;
 }
 export {};

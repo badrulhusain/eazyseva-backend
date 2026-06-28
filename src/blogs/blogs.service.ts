@@ -48,6 +48,18 @@ export class BlogsService {
       expiresAt: number;
     }
   >();
+  private readonly adminListCache = new Map<
+    string,
+    {
+      data: {
+        data: BlogSummary[];
+        total: number;
+        page: number;
+        limit: number;
+      };
+      expiresAt: number;
+    }
+  >();
   private readonly publicDetailCache = new Map<
     string,
     { data: Blog; expiresAt: number }
@@ -194,6 +206,10 @@ export class BlogsService {
     limit: number;
   }> {
     const { page, limit, search, category, status } = query;
+    const cacheKey = BlogsService.adminListCacheKey(query);
+    const cached = this.adminListCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -215,7 +231,7 @@ export class BlogsService {
       });
     }
 
-    return {
+    const result = {
       data: ((data ?? []) as unknown as Partial<BlogRow>[]).map((row) =>
         BlogsService.formatSummaryRow(row),
       ),
@@ -223,6 +239,11 @@ export class BlogsService {
       page,
       limit,
     };
+    this.adminListCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + this.PUBLIC_CACHE_TTL,
+    });
+    return result;
   }
 
   async findOneAdmin(id: string): Promise<Blog> {
@@ -420,7 +441,18 @@ export class BlogsService {
 
   private invalidatePublicCache(): void {
     this.publicListCache.clear();
+    this.adminListCache.clear();
     this.publicDetailCache.clear();
+  }
+
+  private static adminListCacheKey(query: AdminBlogQueryDto): string {
+    return JSON.stringify({
+      page: query.page,
+      limit: query.limit,
+      search: query.search?.trim() ?? '',
+      category: query.category ?? '',
+      status: query.status ?? '',
+    });
   }
 
   private static publicListCacheKey(query: PublicBlogQueryDto): string {

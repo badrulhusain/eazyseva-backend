@@ -15,6 +15,7 @@ export declare class ServicesService {
     private readonly ordersService;
     private readonly logger;
     private readonly publicListCache;
+    private readonly adminListCache;
     private readonly publicDetailCache;
     private readonly PUBLIC_CACHE_TTL;
     constructor(supabaseService: SupabaseService, ordersService: OrdersService);
@@ -30,5 +31,6 @@ export declare class ServicesService {
     }>;
     private invalidatePublicCache;
     private static publicListCacheKey;
+    private static listCacheKey;
 }
 export {};
